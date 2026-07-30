@@ -48,6 +48,19 @@ import { ConfigurationError } from './errors.js'
 /** @typedef {import('abstractionkit').UserOperationReceiptResult} UserOperationReceipt */
 /** @typedef {import('abstractionkit').TokenQuote} TokenQuote */
 
+/** @typedef {import('@tetherto/wdk-wallet').TransactionReceipt} TransactionReceipt */
+
+/**
+ * A normalized EVM 7702 gasless transaction receipt, extended with the confirmation depth, the native ethers transaction and receipt, and the user operation receipt.
+ *
+ * @typedef {TransactionReceipt & {
+ *   confirmations: number,
+ *   transaction: import('ethers').TransactionResponse | null,
+ *   receipt: EvmTransactionReceipt | null,
+ *   userOperationReceipt: UserOperationReceipt
+ * }} Evm7702GaslessTransactionInfo
+ */
+
 /**
  * @typedef {Object} Eip7702AuthorizationOverride
  * @property {bigint} chainId - The chain id the authorization was signed for.
@@ -261,6 +274,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   /**
    * Returns a transaction's receipt.
    *
+   * @deprecated Use {@link getTransaction} instead, which returns a normalized, finality-based receipt. The raw ethers receipt and the user operation receipt remain available on its `receipt` and `userOperationReceipt` properties.
    * @param {string} hash - The user operation hash.
    * @returns {Promise<EvmTransactionReceipt | null>} The receipt, or null if the transaction has not been included in a block yet.
    */
@@ -274,6 +288,61 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     }
 
     return await evmReadOnlyAccount.getTransactionReceipt(userOpReceipt.receipt.transactionHash)
+  }
+
+  /**
+   * Returns a normalized, finality-based receipt for a user operation. Finality and confirmations come from the bundling transaction; `success` and `fee` come from the user operation.
+   *
+   * @param {string} hash - The user operation hash.
+   * @returns {Promise<Evm7702GaslessTransactionInfo | null>} The normalized receipt, or null if the user operation is not known.
+   */
+  async getTransaction (hash) {
+    const bundler = this._getBundler()
+
+    const userOpByHash = await bundler.getUserOperationByHash(hash)
+    if (!userOpByHash) {
+      return null
+    }
+
+    if (!userOpByHash.transactionHash) {
+      return {
+        id: hash,
+        finality: 'pending',
+        success: null,
+        confirmations: 0,
+        transaction: null,
+        receipt: null,
+        userOperationReceipt: null
+      }
+    }
+
+    const [evmReadOnlyAccount, userOpReceipt] = await Promise.all([
+      this._getEvmReadOnlyAccount(),
+      bundler.getUserOperationReceipt(hash)
+    ])
+
+    const info = await evmReadOnlyAccount.getTransaction(userOpByHash.transactionHash)
+    if (!info) {
+      return null
+    }
+
+    return {
+      ...info,
+      id: hash,
+      success: userOpReceipt ? userOpReceipt.success : info.success,
+      fee: userOpReceipt ? userOpReceipt.actualGasCost : info.fee,
+      userOperationReceipt: userOpReceipt
+    }
+  }
+
+  /** @protected @type {number} */
+  get _defaultWaitInterval () {
+    return 4000
+  }
+
+  /** @protected @type {number} */
+  get _defaultWaitTimeout () {
+    return 180000
   }
 
   /**
