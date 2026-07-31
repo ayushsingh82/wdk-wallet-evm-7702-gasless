@@ -32,6 +32,14 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @type {bigint | undefined}
      */
     protected _chainId: bigint | undefined;
+    /** @private */
+    private _smartAccount;
+    /** @private */
+    private _bundler;
+    /** @private */
+    private _paymaster;
+    /** @private */
+    private _evmReadOnlyAccount;
     /**
      * Returns the account balances for multiple tokens.
      *
@@ -176,11 +184,6 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     private _estimateFeesPerGas;
     /** @private */
     private _getTokenExchangeRate;
-    /** @private */
-    private _smartAccount;
-    private _bundler;
-    private _paymaster;
-    private _evmReadOnlyAccount;
 }
 export type Eip1193Provider = import("ethers").Eip1193Provider;
 export type EvmTransaction = import("@tetherto/wdk-wallet-evm").EvmTransaction;
@@ -314,6 +317,4 @@ export type Evm7702GaslessPaymasterTokenConfig = {
 };
 export type Evm7702GaslessWalletConfig = Evm7702GaslessWalletCommonConfig & (Evm7702GaslessSponsorshipPolicyConfig | Evm7702GaslessPaymasterTokenConfig);
 import { WalletAccountReadOnly } from '@tetherto/wdk-wallet';
-import { Simple7702Account } from 'abstractionkit';
 import { Bundler } from 'abstractionkit';
-import { Erc7677Paymaster } from 'abstractionkit';
