@@ -170,6 +170,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
    * @returns {Promise<UserOperationV8>} The signed user operation.
+   * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
    */
   async signTransaction (tx, config) {
     const mergedConfig = { ...this._config, provider: this._provider, ...config }
@@ -178,7 +179,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
-    return await this._buildSignedUserOperation([tx].flat(), { config: mergedConfig })
+    const nonce = await this._resolveNonce(mergedConfig)
+
+    return await this._buildSignedUserOperation([tx].flat(), { config: mergedConfig, nonce })
   }
 
   /**
