@@ -368,7 +368,7 @@ This module uses standard ERC-4337 bundler RPCs (`eth_sendUserOperation`, `eth_e
 | Provider | Sponsored | Paymaster Token | Status |
 |----------|-----------|-----------------|--------|
 | **Pimlico** | Yes | Yes | Fully working — all flows tested on mainnet and Sepolia |
-| **Candide** | Yes | Yes | Working with known limitations (see below) |
+| **Candide** | Yes | Yes | Fully working — earlier gas-estimation issues fixed upstream (re-validated 2026-08) |
 
 ### Not Compatible
 
@@ -377,25 +377,6 @@ This module uses standard ERC-4337 bundler RPCs (`eth_sendUserOperation`, `eth_e
 | **Alchemy** | Locked to Modular Account v2 — rejects all other delegation addresses |
 | **ZeroDev** | Locked to Kernel smart account — requires `createKernelAccount`, not standard `toSimpleSmartAccount` |
 | **Gelato** | Proprietary Smart Wallet SDK — no standard bundler RPCs exposed |
-
-### Known Candide Limitations
-
-Candide's Voltaire bundler has known gas estimation issues affecting EIP-7702 accounts. These are bundler-side bugs, not module issues — the same operations work correctly on Pimlico.
-
-**1. `callGasLimit` underestimation for USDT on Ethereum mainnet**
-
-The bundler returns ~27k `callGasLimit` for USDT transfers, but USDT's non-standard implementation needs ~40k+. The UserOp inner call reverts with empty reason data (out of gas). Standard ERC-20 tokens (USDC, DAI) are not affected.
-
-**2. `verificationGasLimit` underestimation for ERC-20 paymaster**
-
-The bundler's gas estimate doesn't meet its own validation margin. Error: "verificationGas should have extra 2000 gas, has only -15791". Observed on Sepolia with the ERC-20 token paymaster flow.
-
-**Related Candide GitHub issues:**
-- [abstractionkit #57](https://github.com/candidelabs/abstractionkit/issues/57): Gas estimation ran before approval was prepended, producing wrong estimates
-- [abstractionkit #78](https://github.com/candidelabs/abstractionkit/issues/78) (open): Simple7702Account ignoring paymaster fields in overrides
-- [voltaire #33](https://github.com/candidelabs/voltaire/issues/33): Gas estimation failed for IAccountExecute accounts on EntryPoint v0.8
-
-**Recommendation:** Use Pimlico for production deployments until Candide resolves these estimation issues. If using Candide, the paymaster-token flow on Ethereum mainnet works reliably; the sponsored flow works for ETH transfers and standard ERC-20 tokens but may fail for USDT.
 
 ## Security Considerations
 
