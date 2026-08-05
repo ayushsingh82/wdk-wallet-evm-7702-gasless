@@ -308,7 +308,6 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
       return {
         id: hash,
         finality: 'pending',
-        success: null,
         confirmations: 0,
         transaction: null,
         receipt: null,

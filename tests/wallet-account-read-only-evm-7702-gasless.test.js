@@ -31,7 +31,7 @@ const DUMMY_EVM_TX_INFO = {
   id: DUMMY_TX_HASH,
   finality: 'confirmed',
   success: true,
-  blockRef: '0x' + '22'.repeat(32),
+  block: '0x' + '22'.repeat(32),
   fee: 21_000n * 2_000_000_000n,
   confirmations: 3,
   transaction: { hash: DUMMY_TX_HASH },
@@ -555,7 +555,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         const info = await account.getTransaction(DUMMY_USER_OP_HASH)
 
         expect(info.finality).toBe('pending')
-        expect(info.success).toBeNull()
+        expect(info.success).toBeUndefined()
         expect(info.confirmations).toBe(0)
         expect(info.transaction).toBeNull()
         expect(info.receipt).toBeNull()
