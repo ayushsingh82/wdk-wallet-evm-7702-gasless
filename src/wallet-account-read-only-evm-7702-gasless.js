@@ -306,7 +306,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
 
     if (!userOpByHash.transactionHash) {
       return {
-        id: hash,
+        hash,
         finality: 'pending',
         confirmations: 0,
         transaction: null,
@@ -327,7 +327,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
 
     return {
       ...info,
-      id: hash,
+      hash,
       success: userOpReceipt ? userOpReceipt.success : info.success,
       fee: userOpReceipt ? userOpReceipt.actualGasCost : info.fee,
       userOperationReceipt: userOpReceipt
