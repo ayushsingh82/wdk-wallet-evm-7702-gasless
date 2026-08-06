@@ -336,14 +336,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   }
 
   /** @protected @type {number} */
-  get _defaultWaitInterval () {
-    return 4000
-  }
-
-  /** @protected @type {number} */
-  get _defaultWaitTimeout () {
-    return 180000
-  }
+  static _DEFAULT_WAIT_TIMEOUT = 180000
 
   /**
    * Returns a user operation's receipt.
