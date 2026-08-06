@@ -180,12 +180,6 @@ const receipt = await account.getTransactionReceipt(userOpHash)
 
 // Get the raw UserOperation receipt
 const userOpReceipt = await account.getUserOperationReceipt(userOpHash)
-
-// Get a normalized, finality-based receipt (finality / success / block / fee)
-const info = await account.getTransaction(userOpHash)
-
-// Poll until the transaction reaches the target finality (throws only on timeout)
-const settled = await account.waitForTransaction(userOpHash, { target: 'final' })
 ```
 
 ### Message Signing and Verification
@@ -291,8 +285,6 @@ Individual gasless wallet account. Extends `WalletAccountReadOnlyEvm7702Gasless`
 | `getAllowance(token, spender)` | Returns the current allowance | `Promise<bigint>` |
 | `getTransactionReceipt(hash)` | Returns a transaction receipt from a UserOp hash | `Promise<EvmTransactionReceipt \| null>` |
 | `getUserOperationReceipt(hash)` | Returns a UserOperation receipt | `Promise<UserOperationReceipt \| null>` |
-| `getTransaction(hash)` | Returns a normalized, finality-based transaction receipt | `Promise<Evm7702GaslessTransactionInfo>` |
-| `waitForTransaction(hash, options?)` | Polls until the transaction reaches the target finality (or times out) | `Promise<Evm7702GaslessTransactionInfo>` |
 | `toReadOnlyAccount()` | Returns a read-only copy of the account | `Promise<WalletAccountReadOnlyEvm7702Gasless>` |
 | `dispose()` | Disposes the wallet account | `void` |
 
@@ -318,8 +310,6 @@ Read-only EIP-7702 gasless wallet account. Can query balances and estimate fees 
 | `getAllowance(token, spender)` | Returns the current allowance | `Promise<bigint>` |
 | `getTransactionReceipt(hash)` | Returns a transaction receipt from a UserOp hash | `Promise<EvmTransactionReceipt \| null>` |
 | `getUserOperationReceipt(hash)` | Returns a UserOperation receipt | `Promise<UserOperationReceipt \| null>` |
-| `getTransaction(hash)` | Returns a normalized, finality-based transaction receipt | `Promise<Evm7702GaslessTransactionInfo>` |
-| `waitForTransaction(hash, options?)` | Polls until the transaction reaches the target finality (or times out) | `Promise<Evm7702GaslessTransactionInfo>` |
 | `verify(message, signature)` | Verifies a message signature | `Promise<boolean>` |
 | `verifyTypedData(typedData, signature)` | Verifies a typed data signature | `Promise<boolean>` |
 
