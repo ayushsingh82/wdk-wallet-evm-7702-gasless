@@ -82,9 +82,10 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * Returns a normalized, finality-based receipt for a user operation. Finality and confirmations come from the bundling transaction; `success` and `fee` come from the user operation.
      *
      * @param {string} hash - The user operation hash.
-     * @returns {Promise<Evm7702GaslessTransactionInfo | null>} The normalized receipt, or null if the user operation is not known.
+     * @returns {Promise<Evm7702GaslessTransactionInfo>} The normalized receipt.
+     * @throws {NoSuchElementError} If no user operation has been found for the given hash.
      */
-    getTransaction(hash: string): Promise<Evm7702GaslessTransactionInfo | null>;
+    getTransaction(hash: string): Promise<Evm7702GaslessTransactionInfo>;
     /** @protected @type {number} */
     protected get _defaultWaitInterval(): number;
     /** @protected @type {number} */

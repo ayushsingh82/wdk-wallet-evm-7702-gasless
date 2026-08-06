@@ -16,7 +16,7 @@
 
 import { isError, JsonRpcProvider } from 'ethers'
 
-import { WalletAccountReadOnly } from '@tetherto/wdk-wallet'
+import { WalletAccountReadOnly, NoSuchElementError } from '@tetherto/wdk-wallet'
 
 import { WalletAccountReadOnlyEvm } from '@tetherto/wdk-wallet-evm'
 
@@ -294,14 +294,15 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * Returns a normalized, finality-based receipt for a user operation. Finality and confirmations come from the bundling transaction; `success` and `fee` come from the user operation.
    *
    * @param {string} hash - The user operation hash.
-   * @returns {Promise<Evm7702GaslessTransactionInfo | null>} The normalized receipt, or null if the user operation is not known.
+   * @returns {Promise<Evm7702GaslessTransactionInfo>} The normalized receipt.
+   * @throws {NoSuchElementError} If no user operation has been found for the given hash.
    */
   async getTransaction (hash) {
     const bundler = this._getBundler()
 
     const userOpByHash = await bundler.getUserOperationByHash(hash)
     if (!userOpByHash) {
-      return null
+      throw new NoSuchElementError(`No user operation found for '${hash}'.`)
     }
 
     if (!userOpByHash.transactionHash) {
@@ -322,7 +323,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
 
     const info = await evmReadOnlyAccount.getTransaction(userOpByHash.transactionHash)
     if (!info) {
-      return null
+      throw new NoSuchElementError(`No user operation found for '${hash}'.`)
     }
 
     return {
