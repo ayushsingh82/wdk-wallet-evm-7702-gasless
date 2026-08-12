@@ -323,6 +323,26 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         expect(signedOp).toEqual({ ...DUMMY_SPONSORED_OP, signature: EXPECTED_USER_OP_SIGNATURE })
         expect(sendUserOperationMock).not.toHaveBeenCalled()
       })
+
+      test('should throw if the fee exceeds the transaction max fee configuration', async () => {
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...SPONSORED_CONFIG,
+          isSponsored: false,
+          paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
+          paymasterToken: { address: USDT_MAINNET_ADDRESS },
+          transactionMaxFee: 0n
+        })
+
+        await expect(pmAccount.signTransaction({ to: ACCOUNT.address, value: 1, data: '0x' }))
+          .rejects.toThrow('Exceeded maximum fee cost for transaction operation.')
+
+        expect(sendUserOperationMock).not.toHaveBeenCalled()
+      })
     })
 
     describe('signed user operations', () => {
@@ -451,7 +471,49 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
           actualAk.ENTRYPOINT_V8
         )
       })
-  
+
+      test('should throw if the fee exceeds the transaction max fee configuration', async () => {
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...SPONSORED_CONFIG,
+          isSponsored: false,
+          paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
+          paymasterToken: { address: USDT_MAINNET_ADDRESS },
+          transactionMaxFee: 0n
+        })
+
+        await expect(pmAccount.sendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' }))
+          .rejects.toThrow('Exceeded maximum fee cost for transaction operation.')
+
+        expect(sendUserOperationMock).not.toHaveBeenCalled()
+      })
+
+      test('should allow a fee exactly equal to the transaction max fee configuration', async () => {
+        const QUOTED_TOKEN_FEE = 500_000n
+
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: QUOTED_TOKEN_FEE }
+        })
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...SPONSORED_CONFIG,
+          isSponsored: false,
+          paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
+          paymasterToken: { address: USDT_MAINNET_ADDRESS },
+          transactionMaxFee: QUOTED_TOKEN_FEE
+        })
+
+        const { hash, fee } = await pmAccount.sendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' })
+
+        expect(hash).toBe(DUMMY_USER_OP_HASH)
+        expect(fee).toBe(QUOTED_TOKEN_FEE)
+      })
+
       test('should skip the EIP-7702 authorization when the EOA is already delegated to the configured address', async () => {
         const DELEGATED_CODE = '0xef0100' + SPONSORED_CONFIG.delegationAddress.slice(2).toLowerCase()
   

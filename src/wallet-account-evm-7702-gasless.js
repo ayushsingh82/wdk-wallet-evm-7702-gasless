@@ -167,9 +167,12 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
    * broadcast before the account's nonce moves.
    *
+   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+   *
    * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
    * @returns {Promise<UserOperationV8>} The signed user operation.
+   * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
    * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
    */
   async signTransaction (tx, config) {
@@ -179,9 +182,21 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
+    const { isSponsored, transactionMaxFee } = mergedConfig
     const nonce = await this._resolveNonce(mergedConfig)
 
-    return await this._buildSignedUserOperation([tx].flat(), { config: mergedConfig, nonce })
+    let cached
+    if (!isSponsored && transactionMaxFee !== undefined) {
+      const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig, { nonce })
+      const fee = BigInt(result.fee)
+      cached = { fee, sponsoredOp: result.sponsoredOp, tokenQuote: result.tokenQuote }
+
+      if (fee > transactionMaxFee) {
+        throw new Error('Exceeded maximum fee cost for transaction operation.')
+      }
+    }
+
+    return await this._buildSignedUserOperation([tx].flat(), { config: mergedConfig, cached, nonce })
   }
 
   /**
@@ -264,13 +279,16 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   /**
    * Sends a transaction.
    *
+   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+   *
    * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
    * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
-   * in at sign time.
+   * in at sign time. The max-fee check is skipped (it was already enforced during `signTransaction`).
    *
    * @param {EvmTransaction | EvmTransaction[] | UserOperationV8} tx - The transaction, an array of multiple transactions to send in batch, or an already-signed user operation.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
    * @returns {Promise<TransactionResult>} The transaction's result.
+   * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
    * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
    */
   async sendTransaction (tx, config) {
@@ -280,7 +298,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
-    const { isSponsored } = mergedConfig
+    const { isSponsored, transactionMaxFee } = mergedConfig
 
     if (WalletAccountEvm7702Gasless._isSignedUserOperation(tx)) {
       const fee = isSponsored ? 0n : WalletAccountEvm7702Gasless._getSignedUserOperationFee(tx)
@@ -301,6 +319,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig, { nonce })
       fee = BigInt(result.fee)
       cached = { fee, sponsoredOp: result.sponsoredOp, tokenQuote: result.tokenQuote }
+    }
+
+    if (!isSponsored && transactionMaxFee !== undefined && fee > transactionMaxFee) {
+      throw new Error('Exceeded maximum fee cost for transaction operation.')
     }
 
     const hash = await this._sendUserOperation([tx].flat(), { config: mergedConfig, cached, nonce })
@@ -402,7 +424,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * @private
    * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
    * @param {Object} params - The build parameters.
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} params.config - The merged wallet configuration.
+   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} params.config - The merged wallet configuration.
    * @param {TransactionQuote} [params.cached] - A fresh cached quote whose built operation can be reused.
    * @param {bigint} [params.nonce] - Optional explicit lane nonce (from `parallel`/`nonceKey`) to build the operation at.
    * @returns {Promise<UserOperationV8>} The signed user operation.

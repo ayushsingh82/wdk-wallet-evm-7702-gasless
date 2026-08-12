@@ -514,6 +514,92 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
       .rejects.toThrow('Exceeded maximum fee cost for transfer operation.')
   }, TIMEOUT)
 
+  test('should create a wallet with a low transaction max fee, derive an account, try to send a transaction and gracefully fail', async () => {
+    const config = {
+      provider: 'http://localhost:8545',
+      bundlerUrl: 'http://localhost:4337',
+      paymasterUrl: 'http://localhost:3000?pimlico',
+      paymasterAddress: paymasterAddress,
+      delegationAddress: DELEGATION_ADDRESS,
+      paymasterToken: {
+        address: MOCK_PAYMASTER_TOKEN_ADDRESS
+      },
+      transactionMaxFee: 100
+    }
+
+    const wallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
+
+    const account = await wallet.getAccount(0)
+
+    const TX = {
+      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
+      value: 0
+    }
+
+    await expect(account.sendTransaction(TX))
+      .rejects.toThrow('Exceeded maximum fee cost for transaction operation.')
+  }, TIMEOUT)
+
+  test('should allow a fee exactly equal to transactionMaxFee', async () => {
+    const TX = {
+      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
+      value: 0
+    }
+
+    const account0 = await wallet.getAccount(0)
+    const { fee } = await account0.quoteSendTransaction(TX)
+
+    const config = {
+      provider: 'http://localhost:8545',
+      bundlerUrl: 'http://localhost:4337',
+      paymasterUrl: 'http://localhost:3000?pimlico',
+      paymasterAddress: paymasterAddress,
+      delegationAddress: DELEGATION_ADDRESS,
+      paymasterToken: {
+        address: MOCK_PAYMASTER_TOKEN_ADDRESS
+      },
+      transactionMaxFee: fee
+    }
+
+    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
+    const limitedAccount = await limitedWallet.getAccount(0)
+
+    const { hash } = await limitedAccount.sendTransaction(TX)
+    await waitForTx(hash, limitedAccount)
+
+    expect(hash).toBeTruthy()
+  }, TIMEOUT)
+
+  test('should allow a fee below transactionMaxFee', async () => {
+    const TX = {
+      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
+      value: 0
+    }
+
+    const account0 = await wallet.getAccount(0)
+    const { fee } = await account0.quoteSendTransaction(TX)
+
+    const config = {
+      provider: 'http://localhost:8545',
+      bundlerUrl: 'http://localhost:4337',
+      paymasterUrl: 'http://localhost:3000?pimlico',
+      paymasterAddress: paymasterAddress,
+      delegationAddress: DELEGATION_ADDRESS,
+      paymasterToken: {
+        address: MOCK_PAYMASTER_TOKEN_ADDRESS
+      },
+      transactionMaxFee: fee + 1n
+    }
+
+    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
+    const limitedAccount = await limitedWallet.getAccount(0)
+
+    const { hash } = await limitedAccount.sendTransaction(TX)
+    await waitForTx(hash, limitedAccount)
+
+    expect(hash).toBeTruthy()
+  }, TIMEOUT)
+
   test('should use cached fee when sendTransaction is called with the same quoted params', async () => {
     const account0 = await wallet.getAccountByPath("0'/0/0")
     account0._quoteCache.clear()

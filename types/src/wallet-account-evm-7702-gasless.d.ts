@@ -1,5 +1,26 @@
 /** @implements {IWalletAccount} */
 export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEvm7702Gasless implements IWalletAccount {
+    /**
+     * Determines whether a value is an already-signed UserOperation (as returned by `signTransaction`)
+     * rather than an unsigned {@link EvmTransaction} (or array of them).
+     *
+     * @private
+     * @param {EvmTransaction | EvmTransaction[] | UserOperationV8} tx - The value to inspect.
+     * @returns {boolean} True if the value is a signed UserOperation.
+     */
+    private static _isSignedUserOperation;
+    /**
+     * Computes the fee for an already-signed UserOperation from its own gas fields.
+     *
+     * In token-paymaster mode this reflects the native gas ceiling (in wei) rather than the token
+     * amount: the token cost is set by the paymaster at sign time and cannot be reproduced from the
+     * signed UserOperation.
+     *
+     * @private
+     * @param {UserOperationV8} userOp - The signed UserOperation.
+     * @returns {bigint} The fee, in the account's native coin (wei).
+     */
+    private static _getSignedUserOperationFee;
     /** @private */
     private static _getTxKey;
     /**
@@ -77,9 +98,13 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
      * broadcast before the account's nonce moves.
      *
+     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+     *
      * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
      * @returns {Promise<UserOperationV8>} The signed user operation.
+     * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
+     * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
      */
     signTransaction(tx: EvmTransaction | EvmTransaction[], config?: Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>): Promise<UserOperationV8>;
     /**
@@ -109,13 +134,17 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /**
      * Sends a transaction.
      *
+     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+     *
      * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
      * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
-     * in at sign time.
+     * in at sign time. The max-fee check is skipped (it was already enforced during `signTransaction`).
      *
      * @param {EvmTransaction | EvmTransaction[] | UserOperationV8} tx - The transaction, an array of multiple transactions to send in batch, or an already-signed user operation.
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
      * @returns {Promise<TransactionResult>} The transaction's result.
+     * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
+     * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
      */
     sendTransaction(tx: EvmTransaction | EvmTransaction[] | UserOperationV8, config?: Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>): Promise<TransactionResult>;
     /**
@@ -125,6 +154,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
      * @returns {Promise<TransferResult>} The transfer's result.
      * @throws {Error} If the estimated fee meets or exceeds the configured `transferMaxFee`.
+     * @throws {Error} If `nonceKey` is a bigint outside the uint192 range (0 to 2^192 - 1).
      */
     transfer(options: EvmTransferOptions, config?: Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>): Promise<TransferResult>;
     /**
@@ -148,8 +178,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * @private
      * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
      * @param {Object} params - The build parameters.
-     * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} params.config - The merged wallet configuration.
+     * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} params.config - The merged wallet configuration.
      * @param {TransactionQuote} [params.cached] - A fresh cached quote whose built operation can be reused.
+     * @param {bigint} [params.nonce] - Optional explicit lane nonce (from `parallel`/`nonceKey`) to build the operation at.
      * @returns {Promise<UserOperationV8>} The signed user operation.
      */
     private _buildSignedUserOperation;
@@ -163,8 +194,6 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * @returns {Promise<string>} The user operation hash.
      */
     private _broadcastSignedUserOperation;
-    private static _isSignedUserOperation;
-    private static _getSignedUserOperationFee;
     /** @private */
     private _consumeFreshQuote;
     /** @private */

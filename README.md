@@ -57,7 +57,8 @@ const wallet = new WalletManagerEvm7702Gasless(seedPhrase, {
   bundlerUrl: 'https://api.pimlico.io/v2/1/rpc?apikey=YOUR_KEY',
   paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
   paymasterToken: { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7' }, // USDT
-  transferMaxFee: 100000000000000n
+  transferMaxFee: 100000000000000n,
+  transactionMaxFee: 100000000000000n
 })
 ```
 
@@ -271,6 +272,7 @@ wallet.dispose()  // Dispose all accounts
 | `paymasterAddress` | `string` (optional) | Pin on the paymaster smart contract address. When omitted, it is derived from the paymaster RPC (`pm_supportedERC20Tokens` for Candide, `pimlico_getTokenQuotes` for Pimlico) |
 | `paymasterToken` | `{ address: string }` | ERC-20 token used for gas payment |
 | `transferMaxFee` | `number \| bigint` (optional) | Maximum fee for transfer operations |
+| `transactionMaxFee` | `number \| bigint` (optional) | Maximum fee for sendTransaction and signTransaction operations |
 
 ## API Reference
 
@@ -383,7 +385,7 @@ This module uses standard ERC-4337 bundler RPCs (`eth_sendUserOperation`, `eth_e
 - **Seed Phrase Security**: Always store your seed phrase securely and never share it
 - **Private Key Management**: The package handles private keys internally via memory-safe buffers (`Uint8Array`) that are zeroed on `dispose()`
 - **Memory Cleanup**: Use the `dispose()` method to clear private keys from memory when done
-- **Fee Limits**: Set `transferMaxFee` to prevent excessive transaction fees
+- **Fee Limits**: Set `transferMaxFee` and `transactionMaxFee` to prevent excessive transaction fees
 - **Delegation Awareness**: The EOA delegates execution to a smart account implementation — verify the `delegationAddress` is trusted and audited
 - **Bundler Security**: Use trusted bundler services and validate UserOperation responses
 - **Contract Interactions**: Verify contract addresses and token decimals before transfers

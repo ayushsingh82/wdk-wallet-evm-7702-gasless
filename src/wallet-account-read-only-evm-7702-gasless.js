@@ -101,6 +101,7 @@ import { ConfigurationError } from './errors.js'
  * @property {Object} paymasterToken - The paymaster token configuration.
  * @property {string} paymasterToken.address - The address of the paymaster token.
  * @property {number | bigint} [transferMaxFee] - The maximum fee amount for transfer operations.
+ * @property {number | bigint} [transactionMaxFee] - The maximum fee amount for sendTransaction and signTransaction operations.
  */
 
 /**
@@ -123,7 +124,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * Creates a new read-only evm 7702 gasless wallet account.
    *
    * @param {string} address - The evm account's address (the EOA address directly).
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} config - The configuration object.
+   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} config - The configuration object.
    */
   constructor (address, config) {
     super(address)
@@ -134,7 +135,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * The read-only evm 7702 gasless wallet account configuration.
      *
      * @protected
-     * @type {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>}
+     * @type {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>}
      */
     this._config = config
 
@@ -349,7 +350,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * Creates a FailoverProvider from the configured providers. If only one provider is supplied, it is wrapped and returned.
    *
    * @protected
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} [config] - The configuration object.
+   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} [config] - The configuration object.
    * @returns {Eip1193Provider} A wrapped Eip1193Provider instance.
    * @throws {ConfigurationError} If the `provider` option is set to an empty array.
    */
@@ -441,7 +442,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    *
    * @protected
    * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} config - The merged wallet configuration (base config merged with any per-call overrides).
+   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} config - The merged wallet configuration (base config merged with any per-call overrides).
    * @param {BuildSponsoredUserOperationOverrides} [overrides] - Optional overrides for the build step (currently only the pre-signed 7702 authorization).
    * @returns {Promise<SponsoredUserOperation>} The paymaster-populated user operation plus the token-quote data (when applicable).
    * @throws {Error} If the token paymaster reports AA50 (account does not hold the paymaster token).
@@ -619,7 +620,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    *
    * @protected
    * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee'>} config - The merged wallet configuration.
+   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} config - The merged wallet configuration.
    * @param {BuildSponsoredUserOperationOverrides} [overrides] - Optional build overrides forwarded to `_buildSponsoredUserOperation` (e.g. an explicit EntryPoint nonce).
    * @returns {Promise<UserOperationGasCost>} The fee plus the built user operation and the token-quote data, cacheable between quote and send.
    */
