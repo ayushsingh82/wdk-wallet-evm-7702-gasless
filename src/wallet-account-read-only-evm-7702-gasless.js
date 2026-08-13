@@ -14,9 +14,9 @@
 
 'use strict'
 
-import { isError, JsonRpcProvider } from 'ethers'
+import { isError, isHexString, JsonRpcProvider } from 'ethers'
 
-import { WalletAccountReadOnly, NoSuchElementError } from '@tetherto/wdk-wallet'
+import { WalletAccountReadOnly, NoSuchElementError, ValueError } from '@tetherto/wdk-wallet'
 
 import { WalletAccountReadOnlyEvm } from '@tetherto/wdk-wallet-evm'
 
@@ -49,16 +49,15 @@ import { ConfigurationError } from './errors.js'
 /** @typedef {import('abstractionkit').TokenQuote} TokenQuote */
 
 /** @typedef {import('@tetherto/wdk-wallet').TransactionReceipt} TransactionReceipt */
+/** @typedef {import('@tetherto/wdk-wallet').WaitForTransactionOptions} WaitForTransactionOptions */
 
 /**
- * A normalized EVM 7702 gasless transaction receipt, extended with the confirmation depth, the native ethers transaction and receipt, and the user operation receipt.
+ * The EVM 7702 gasless-specific fields added to a normalized transaction receipt.
  *
- * @typedef {TransactionReceipt & {
- *   confirmations: number,
- *   transaction: import('ethers').TransactionResponse | null,
- *   receipt: EvmTransactionReceipt | null,
- *   userOperationReceipt: UserOperationReceipt
- * }} Evm7702GaslessTransactionInfo
+ * @typedef {Object} Evm7702GaslessTransactionDetails
+ * @property {number} confirmations - The number of confirmations (0 while pending or dropped).
+ * @property {EvmTransactionReceipt | null} receipt - The native ethers receipt of the bundling transaction, or null while the user operation is pending or dropped.
+ * @property {UserOperationReceipt | null} userOperationReceipt - The user operation receipt, or null while the user operation is pending or its receipt is not yet available.
  */
 
 /**
@@ -294,10 +293,15 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * Returns a normalized, finality-based receipt for a user operation. Finality and confirmations come from the bundling transaction; `success` and `fee` come from the user operation.
    *
    * @param {string} hash - The user operation hash.
-   * @returns {Promise<Evm7702GaslessTransactionInfo>} The normalized receipt.
+   * @returns {Promise<TransactionReceipt & Evm7702GaslessTransactionDetails>} The normalized receipt.
+   * @throws {ValueError} If the hash is not a valid user operation hash.
    * @throws {NoSuchElementError} If no user operation has been found for the given hash.
    */
   async getTransaction (hash) {
+    if (!isHexString(hash, 32)) {
+      throw new ValueError(`Invalid user operation hash: '${hash}'.`)
+    }
+
     const bundler = this._getBundler()
 
     const userOpByHash = await bundler.getUserOperationByHash(hash)
@@ -310,7 +314,6 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
         hash,
         finality: 'pending',
         confirmations: 0,
-        transaction: null,
         receipt: null,
         userOperationReceipt: null
       }
@@ -335,8 +338,26 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     }
   }
 
-  /** @protected @type {number} */
-  static _DEFAULT_WAIT_TIMEOUT = 180000
+  /**
+   * Blocks until a user operation reaches a terminal state (the requested finality target or `dropped`), or times out.
+   *
+   * @param {string} hash - The user operation hash.
+   * @param {WaitForTransactionOptions} [options] - The wait options.
+   * @returns {Promise<TransactionReceipt & Evm7702GaslessTransactionDetails>} The terminal receipt: the finality target reached (inspect `success` to tell success from revert), or `dropped`.
+   * @throws {TimeoutError} If the target is not reached before the timeout.
+   */
+  async waitForTransaction (hash, options = {}) {
+    return await super.waitForTransaction(hash, options)
+  }
+
+  /**
+   * Overrides the base default to allow for slower gasless/bundler inclusion and confirmation.
+   *
+   * @type {number}
+   */
+  get defaultWaitTimeout () {
+    return 180000
+  }
 
   /**
    * Returns a user operation's receipt.

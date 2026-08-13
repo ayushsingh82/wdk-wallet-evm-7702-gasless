@@ -28,6 +28,11 @@
 /** @typedef {import('@tetherto/wdk-wallet-evm').TypedDataDomain} TypedDataDomain */
 /** @typedef {import('@tetherto/wdk-wallet-evm').TypedDataField} TypedDataField */
 
+/** @typedef {import('@tetherto/wdk-wallet').Finality} Finality */
+/** @typedef {import('@tetherto/wdk-wallet').TransactionReceipt} TransactionReceipt */
+/** @typedef {import('@tetherto/wdk-wallet').WaitForTransactionTarget} WaitForTransactionTarget */
+/** @typedef {import('@tetherto/wdk-wallet').WaitForTransactionOptions} WaitForTransactionOptions */
+
 /** @typedef {import('./src/wallet-manager-evm-7702-gasless.js').Evm7702GaslessWalletConfig} Evm7702GaslessWalletConfig */
 
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').Evm7702GaslessWalletCommonConfig} Evm7702GaslessWalletCommonConfig */
@@ -37,7 +42,7 @@
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').Eip7702AuthorizationOverride} Eip7702AuthorizationOverride */
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').BuildSponsoredUserOperationOverrides} BuildSponsoredUserOperationOverrides */
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').SponsoredUserOperation} SponsoredUserOperation */
-/** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').Evm7702GaslessTransactionInfo} Evm7702GaslessTransactionInfo */
+/** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').Evm7702GaslessTransactionDetails} Evm7702GaslessTransactionDetails */
 
 export { default } from './src/wallet-manager-evm-7702-gasless.js'
 
