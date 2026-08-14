@@ -139,6 +139,18 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
   let bundlerInstance, paymasterInstance
   let paymasterAddress
 
+  const buildPaymasterTokenConfig = (overrides = {}) => ({
+    provider: 'http://localhost:8545',
+    bundlerUrl: 'http://localhost:4337',
+    paymasterUrl: 'http://localhost:3000?pimlico',
+    paymasterAddress,
+    delegationAddress: DELEGATION_ADDRESS,
+    paymasterToken: {
+      address: MOCK_PAYMASTER_TOKEN_ADDRESS
+    },
+    ...overrides
+  })
+
   beforeAll(async () => {
     await plantMainnetContracts(ethersProvider)
 
@@ -515,21 +527,10 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
   }, TIMEOUT)
 
   test('should create a wallet with a low transaction max fee, derive an account, try to send a transaction and gracefully fail', async () => {
-    const config = {
-      provider: 'http://localhost:8545',
-      bundlerUrl: 'http://localhost:4337',
-      paymasterUrl: 'http://localhost:3000?pimlico',
-      paymasterAddress: paymasterAddress,
-      delegationAddress: DELEGATION_ADDRESS,
-      paymasterToken: {
-        address: MOCK_PAYMASTER_TOKEN_ADDRESS
-      },
-      transactionMaxFee: 100
-    }
+    const config = buildPaymasterTokenConfig({ transactionMaxFee: 100 })
 
-    const wallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
-
-    const account = await wallet.getAccount(0)
+    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
+    const account = await limitedWallet.getAccount(0)
 
     const TX = {
       to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
@@ -540,7 +541,10 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
       .rejects.toThrow('Exceeded maximum fee cost for transaction operation.')
   }, TIMEOUT)
 
-  test('should allow a fee exactly equal to transactionMaxFee', async () => {
+  test.each([
+    ['exactly equal to', 0n],
+    ['below', 1n]
+  ])('should allow a fee %s transactionMaxFee', async (_label, headroom) => {
     const TX = {
       to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
       value: 0
@@ -549,55 +553,14 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
     const account0 = await wallet.getAccount(0)
     const { fee } = await account0.quoteSendTransaction(TX)
 
-    const config = {
-      provider: 'http://localhost:8545',
-      bundlerUrl: 'http://localhost:4337',
-      paymasterUrl: 'http://localhost:3000?pimlico',
-      paymasterAddress: paymasterAddress,
-      delegationAddress: DELEGATION_ADDRESS,
-      paymasterToken: {
-        address: MOCK_PAYMASTER_TOKEN_ADDRESS
-      },
-      transactionMaxFee: fee
-    }
+    const { hash, fee: sendFee } = await account0.sendTransaction(TX, {
+      transactionMaxFee: fee + headroom
+    })
+    const receipt = await waitForTx(hash, account0)
 
-    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
-    const limitedAccount = await limitedWallet.getAccount(0)
-
-    const { hash } = await limitedAccount.sendTransaction(TX)
-    await waitForTx(hash, limitedAccount)
-
-    expect(hash).toBeTruthy()
-  }, TIMEOUT)
-
-  test('should allow a fee below transactionMaxFee', async () => {
-    const TX = {
-      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
-      value: 0
-    }
-
-    const account0 = await wallet.getAccount(0)
-    const { fee } = await account0.quoteSendTransaction(TX)
-
-    const config = {
-      provider: 'http://localhost:8545',
-      bundlerUrl: 'http://localhost:4337',
-      paymasterUrl: 'http://localhost:3000?pimlico',
-      paymasterAddress: paymasterAddress,
-      delegationAddress: DELEGATION_ADDRESS,
-      paymasterToken: {
-        address: MOCK_PAYMASTER_TOKEN_ADDRESS
-      },
-      transactionMaxFee: fee + 1n
-    }
-
-    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
-    const limitedAccount = await limitedWallet.getAccount(0)
-
-    const { hash } = await limitedAccount.sendTransaction(TX)
-    await waitForTx(hash, limitedAccount)
-
-    expect(hash).toBeTruthy()
+    expect(sendFee).toBe(fee)
+    expect(receipt.status).toBe(1)
+    expect(hash).toMatch(/^0x[0-9a-fA-F]{64}$/)
   }, TIMEOUT)
 
   test('should use cached fee when sendTransaction is called with the same quoted params', async () => {
