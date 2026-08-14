@@ -46,7 +46,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     private _evm7702GaslessReadOnlyAccount;
     /**
      * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
-     * sendTransaction and transfer consume an entry to skip the gas-estimation +
+     * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
      * paymaster round-trip when the same tx was just quoted. Entries expire after
      * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
      *
@@ -113,13 +113,14 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * @param {ApproveOptions} options - The approve options.
      * @returns {Promise<TransactionResult>} The transaction's result.
      * @throws {Error} If trying to approve usdts on ethereum with allowance not equal to zero (due to the usdt allowance reset requirement).
+     * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
      */
     approve(options: ApproveOptions): Promise<TransactionResult>;
     /**
      * Quotes the costs of a send transaction operation. Caches the built user
      * operation against the serialized transaction so that a subsequent
-     * sendTransaction call with the same tx can skip the gas-estimation +
-     * paymaster round-trip, after a lightweight on-chain nonce check that
+     * sendTransaction / signTransaction / transfer call with the same tx can skip the
+     * gas-estimation + paymaster round-trip, after a lightweight on-chain nonce check that
      * re-quotes only if the nonce has moved. Cache entries expire after 2 minutes.
      *
      * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
@@ -138,7 +139,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      *
      * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
      * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
-     * in at sign time. The max-fee check is skipped (it was already enforced during `signTransaction`).
+     * in at sign time. The max-fee check is skipped here: token-paymaster fees cannot be reconstructed
+     * from a signed user operation (`_getSignedUserOperationFee` returns native wei, while
+     * `transactionMaxFee` is in paymaster-token units), so the ceiling only applies when this wallet
+     * builds/signs the operation with `transactionMaxFee` configured.
      *
      * @param {EvmTransaction | EvmTransaction[] | UserOperationV8} tx - The transaction, an array of multiple transactions to send in batch, or an already-signed user operation.
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
@@ -170,20 +174,27 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /** @private */
     private _getAuthorization;
     /**
-     * Builds a paymaster-sponsored user operation and signs it with the owner account.
-     * The pre-signed EIP-7702 authorization is baked in when the EOA is not yet delegated
-     * to the configured address, so the returned operation is self-contained and can be
-     * broadcast later without any further owner interaction.
+     * Resolves nonce / EIP-7702 authorization and builds the user operation that will later be
+     * signed and broadcast. The fee check and the signature always cover this same build.
+     *
+     * Quote-cache reuse is only valid when the EOA is already delegated: quotes are built without
+     * an authorization, and an undeployed sender needs one for bundler simulation.
      *
      * @private
-     * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
-     * @param {Object} params - The build parameters.
-     * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} params.config - The merged wallet configuration.
-     * @param {TransactionQuote} [params.cached] - A fresh cached quote whose built operation can be reused.
-     * @param {bigint} [params.nonce] - Optional explicit lane nonce (from `parallel`/`nonceKey`) to build the operation at.
+     * @param {EvmTransaction | EvmTransaction[]} tx - The original transaction value (used as the quote-cache key).
+     * @param {EvmTransaction[]} txs - The flattened transaction list to batch into the user operation.
+     * @param {Evm7702GaslessWalletConfig} config - The merged wallet configuration.
+     * @returns {Promise<{ fee: bigint, sponsoredOp: UserOperationV8, tokenQuote?: TokenQuote }>} The prepared build.
+     */
+    private _prepareForSend;
+    /**
+     * Signs a previously prepared user operation with the owner account.
+     *
+     * @private
+     * @param {{ sponsoredOp: UserOperationV8 }} prepared - The build from `_prepareForSend`.
      * @returns {Promise<UserOperationV8>} The signed user operation.
      */
-    private _buildSignedUserOperation;
+    private _signPreparedUserOperation;
     /** @private */
     private _sendUserOperation;
     /**

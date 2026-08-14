@@ -343,6 +343,67 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
 
         expect(sendUserOperationMock).not.toHaveBeenCalled()
       })
+
+      test('should include EIP-7702 authorization when estimating a capped fee for an undeployed EOA', async () => {
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...SPONSORED_CONFIG,
+          isSponsored: false,
+          paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
+          paymasterToken: { address: USDT_MAINNET_ADDRESS },
+          transactionMaxFee: 1_000_000n
+        })
+
+        await pmAccount.signTransaction({ to: ACCOUNT.address, value: 1, data: '0x' })
+
+        expect(createUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(createUserOperationMock.mock.calls[0][3].eip7702Auth).toEqual(expect.objectContaining({
+          address: SPONSORED_CONFIG.delegationAddress
+        }))
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(sendUserOperationMock).not.toHaveBeenCalled()
+      })
+
+      test('should reuse a prior quote when signing for an already-delegated EOA and clear the cache', async () => {
+        const DELEGATED_CODE = '0xef0100' + SPONSORED_CONFIG.delegationAddress.slice(2).toLowerCase()
+        const DELEGATED_PROVIDER = {
+          request: jest.fn(async ({ method }) => {
+            if (method === 'eth_chainId') return '0x1'
+            if (method === 'eth_getCode') return DELEGATED_CODE
+            if (method === 'eth_getTransactionCount') return '0x0'
+            if (method === 'net_version') return '1'
+            return null
+          })
+        }
+
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+        fetchAccountNonceMock.mockResolvedValue(0n)
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...SPONSORED_CONFIG,
+          provider: DELEGATED_PROVIDER,
+          isSponsored: false,
+          paymasterAddress: '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402',
+          paymasterToken: { address: USDT_MAINNET_ADDRESS },
+          transactionMaxFee: 1_000_000n
+        })
+
+        const TRANSACTION = { to: ACCOUNT.address, value: 1, data: '0x' }
+
+        await pmAccount.quoteSendTransaction(TRANSACTION)
+        await pmAccount.signTransaction(TRANSACTION)
+
+        expect(createUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(pmAccount._quoteCache.size).toBe(0)
+      })
     })
 
     describe('signed user operations', () => {

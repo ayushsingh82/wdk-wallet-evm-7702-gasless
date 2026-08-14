@@ -96,17 +96,17 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /** @private */
     this._evm7702GaslessReadOnlyAccount = undefined
 
-    /**
-     * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
-     * sendTransaction and transfer consume an entry to skip the gas-estimation +
-     * paymaster round-trip when the same tx was just quoted. Entries expire after
-     * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
-     *
-     * @private
-     * @type {Map<string, TransactionQuote>}
-     */
-    this._quoteCache = new Map()
-  }
+  /**
+   * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
+   * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
+   * paymaster round-trip when the same tx was just quoted. Entries expire after
+   * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
+   *
+   * @private
+   * @type {Map<string, TransactionQuote>}
+   */
+  this._quoteCache = new Map()
+}
 
   /**
    * The derivation path's index of this account.
@@ -182,21 +182,19 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
+    const txs = [tx].flat()
+    const prepared = await this._prepareForSend(tx, txs, mergedConfig)
+
     const { isSponsored, transactionMaxFee } = mergedConfig
-    const nonce = await this._resolveNonce(mergedConfig)
-
-    let cached
-    if (!isSponsored && transactionMaxFee !== undefined) {
-      const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig, { nonce })
-      const fee = BigInt(result.fee)
-      cached = { fee, sponsoredOp: result.sponsoredOp, tokenQuote: result.tokenQuote }
-
-      if (fee > transactionMaxFee) {
-        throw new Error('Exceeded maximum fee cost for transaction operation.')
-      }
+    if (!isSponsored && transactionMaxFee !== undefined && prepared.fee > transactionMaxFee) {
+      throw new Error('Exceeded maximum fee cost for transaction operation.')
     }
 
-    return await this._buildSignedUserOperation([tx].flat(), { config: mergedConfig, cached, nonce })
+    const userOp = await this._signPreparedUserOperation(prepared)
+
+    this._quoteCache.clear()
+
+    return userOp
   }
 
   /**
@@ -205,6 +203,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * @param {ApproveOptions} options - The approve options.
    * @returns {Promise<TransactionResult>} The transaction's result.
    * @throws {Error} If trying to approve usdts on ethereum with allowance not equal to zero (due to the usdt allowance reset requirement).
+   * @throws {Error} If the transaction is not sponsored, and the transaction's cost surpasses the transaction max. fee option.
    */
   async approve (options) {
     const { token, spender, amount } = options
@@ -233,8 +232,8 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   /**
    * Quotes the costs of a send transaction operation. Caches the built user
    * operation against the serialized transaction so that a subsequent
-   * sendTransaction call with the same tx can skip the gas-estimation +
-   * paymaster round-trip, after a lightweight on-chain nonce check that
+   * sendTransaction / signTransaction / transfer call with the same tx can skip the
+   * gas-estimation + paymaster round-trip, after a lightweight on-chain nonce check that
    * re-quotes only if the nonce has moved. Cache entries expire after 2 minutes.
    *
    * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
@@ -283,7 +282,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    *
    * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
    * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
-   * in at sign time. The max-fee check is skipped (it was already enforced during `signTransaction`).
+   * in at sign time. The max-fee check is skipped here: token-paymaster fees cannot be reconstructed
+   * from a signed user operation (`_getSignedUserOperationFee` returns native wei, while
+   * `transactionMaxFee` is in paymaster-token units), so the ceiling only applies when this wallet
+   * builds/signs the operation with `transactionMaxFee` configured.
    *
    * @param {EvmTransaction | EvmTransaction[] | UserOperationV8} tx - The transaction, an array of multiple transactions to send in batch, or an already-signed user operation.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
@@ -308,26 +310,15 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       return { hash, fee }
     }
 
-    const nonce = await this._resolveNonce(mergedConfig)
+    const txs = [tx].flat()
+    const prepared = await this._prepareForSend(tx, txs, mergedConfig)
 
-    let cached = nonce === undefined ? await this._consumeFreshQuote(tx) : null
-    let fee = 0n
-
-    if (cached) {
-      fee = cached.fee
-    } else if (!isSponsored) {
-      const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig, { nonce })
-      fee = BigInt(result.fee)
-      cached = { fee, sponsoredOp: result.sponsoredOp, tokenQuote: result.tokenQuote }
-    }
-
-    if (!isSponsored && transactionMaxFee !== undefined && fee > transactionMaxFee) {
+    if (!isSponsored && transactionMaxFee !== undefined && prepared.fee > transactionMaxFee) {
       throw new Error('Exceeded maximum fee cost for transaction operation.')
     }
 
-    const hash = await this._sendUserOperation([tx].flat(), { config: mergedConfig, cached, nonce })
-
-    return { hash, fee }
+    const hash = await this._sendUserOperation(prepared)
+    return { hash, fee: prepared.fee }
   }
 
   /**
@@ -349,27 +340,15 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const { isSponsored, transferMaxFee } = mergedConfig
 
     const tx = await WalletAccountEvm._getTransferTransaction(options)
+    const txs = [tx]
+    const prepared = await this._prepareForSend(tx, txs, mergedConfig)
 
-    const nonce = await this._resolveNonce(mergedConfig)
-
-    let cached = nonce === undefined ? await this._consumeFreshQuote(tx) : null
-    let fee = 0n
-
-    if (cached) {
-      fee = cached.fee
-    } else if (!isSponsored) {
-      const result = await this._getUserOperationGasCost([tx], mergedConfig, { nonce })
-      fee = BigInt(result.fee)
-      cached = { fee, sponsoredOp: result.sponsoredOp, tokenQuote: result.tokenQuote }
-    }
-
-    if (!isSponsored && transferMaxFee !== undefined && fee >= transferMaxFee) {
+    if (!isSponsored && transferMaxFee !== undefined && prepared.fee >= transferMaxFee) {
       throw new Error('Exceeded maximum fee cost for transfer operation.')
     }
 
-    const hash = await this._sendUserOperation([tx], { config: mergedConfig, cached, nonce })
-
-    return { hash, fee }
+    const hash = await this._sendUserOperation(prepared)
+    return { hash, fee: prepared.fee }
   }
 
   /**
@@ -416,29 +395,58 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /**
-   * Builds a paymaster-sponsored user operation and signs it with the owner account.
-   * The pre-signed EIP-7702 authorization is baked in when the EOA is not yet delegated
-   * to the configured address, so the returned operation is self-contained and can be
-   * broadcast later without any further owner interaction.
+   * Resolves nonce / EIP-7702 authorization and builds the user operation that will later be
+   * signed and broadcast. The fee check and the signature always cover this same build.
+   *
+   * Quote-cache reuse is only valid when the EOA is already delegated: quotes are built without
+   * an authorization, and an undeployed sender needs one for bundler simulation.
    *
    * @private
-   * @param {EvmTransaction[]} txs - The transactions to batch into the user operation.
-   * @param {Object} params - The build parameters.
-   * @param {Omit<Evm7702GaslessWalletConfig, 'transferMaxFee' | 'transactionMaxFee'>} params.config - The merged wallet configuration.
-   * @param {TransactionQuote} [params.cached] - A fresh cached quote whose built operation can be reused.
-   * @param {bigint} [params.nonce] - Optional explicit lane nonce (from `parallel`/`nonceKey`) to build the operation at.
-   * @returns {Promise<UserOperationV8>} The signed user operation.
+   * @param {EvmTransaction | EvmTransaction[]} tx - The original transaction value (used as the quote-cache key).
+   * @param {EvmTransaction[]} txs - The flattened transaction list to batch into the user operation.
+   * @param {Evm7702GaslessWalletConfig} config - The merged wallet configuration.
+   * @returns {Promise<{ fee: bigint, sponsoredOp: UserOperationV8, tokenQuote?: TokenQuote }>} The prepared build.
    */
-  async _buildSignedUserOperation (txs, { config, cached, nonce }) {
+  async _prepareForSend (tx, txs, config) {
+    const nonce = await this._resolveNonce(config)
     const eip7702Auth = await this._getAuthorization(config)
 
-    let sponsoredOp
-    if (cached?.sponsoredOp && eip7702Auth === null) {
-      sponsoredOp = cached.sponsoredOp
-    } else {
-      const { userOperation } = await this._buildSponsoredUserOperation(txs, config, { eip7702Auth, nonce })
-      sponsoredOp = userOperation
+    if (nonce === undefined && eip7702Auth === null) {
+      const cached = await this._consumeFreshQuote(tx)
+      if (cached?.sponsoredOp) {
+        return {
+          fee: cached.fee,
+          sponsoredOp: cached.sponsoredOp,
+          tokenQuote: cached.tokenQuote
+        }
+      }
     }
+
+    if (config.isSponsored) {
+      const { userOperation, tokenQuote } = await this._buildSponsoredUserOperation(txs, config, {
+        eip7702Auth,
+        nonce
+      })
+      return { fee: 0n, sponsoredOp: userOperation, tokenQuote }
+    }
+
+    const result = await this._getUserOperationGasCost(txs, config, { eip7702Auth, nonce })
+    return {
+      fee: BigInt(result.fee),
+      sponsoredOp: result.sponsoredOp,
+      tokenQuote: result.tokenQuote
+    }
+  }
+
+  /**
+   * Signs a previously prepared user operation with the owner account.
+   *
+   * @private
+   * @param {{ sponsoredOp: UserOperationV8 }} prepared - The build from `_prepareForSend`.
+   * @returns {Promise<UserOperationV8>} The signed user operation.
+   */
+  async _signPreparedUserOperation (prepared) {
+    const { sponsoredOp } = prepared
 
     const chainId = await this._getChainId()
     const typedData = Simple7702Account.getUserOperationEip712Data(sponsoredOp, chainId)
@@ -453,8 +461,8 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /** @private */
-  async _sendUserOperation (txs, { config, cached, nonce }) {
-    const sponsoredOp = await this._buildSignedUserOperation(txs, { config, cached, nonce })
+  async _sendUserOperation (prepared) {
+    const sponsoredOp = await this._signPreparedUserOperation(prepared)
 
     return await this._broadcastSignedUserOperation(sponsoredOp)
   }
