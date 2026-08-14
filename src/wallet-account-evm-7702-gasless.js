@@ -57,6 +57,9 @@ const QUOTE_CACHE_TTL_MS = 2 * 60 * 1000
 const NONCE_KEY_SHIFT = 64n
 const MAX_UINT192 = (1n << 192n) - 1n
 
+const DELEGATION_DESIGNATOR_PREFIX = '0xef0100'
+const DELEGATION_DESIGNATOR_LENGTH = 48
+
 /** @implements {IWalletAccount} */
 export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEvm7702Gasless {
   /**
@@ -96,17 +99,17 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /** @private */
     this._evm7702GaslessReadOnlyAccount = undefined
 
-  /**
-   * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
-   * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
-   * paymaster round-trip when the same tx was just quoted. Entries expire after
-   * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
-   *
-   * @private
-   * @type {Map<string, TransactionQuote>}
-   */
-  this._quoteCache = new Map()
-}
+    /**
+     * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
+     * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
+     * paymaster round-trip when the same tx was just quoted. Entries expire after
+     * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
+     *
+     * @private
+     * @type {Map<string, TransactionQuote>}
+     */
+    this._quoteCache = new Map()
+  }
 
   /**
    * The derivation path's index of this account.
@@ -373,11 +376,22 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
 
   /** @private */
   async _getAuthorization (config = this._config) {
-    const delegation = await this._ownerAccount.getDelegation()
+    // Use this module's failover provider (connectivity-only retries). Checking via the owner
+    // account would go through wdk-wallet-evm's broader FailoverProvider defaults.
+    const code = await this._provider.request({
+      method: 'eth_getCode',
+      params: [this._address, 'latest']
+    })
 
-    if (delegation.isDelegated &&
-        delegation.delegateAddress.toLowerCase() === config.delegationAddress.toLowerCase()) {
-      return null
+    const normalized = (code || '0x').toLowerCase()
+    if (
+      normalized.startsWith(DELEGATION_DESIGNATOR_PREFIX) &&
+      normalized.length === DELEGATION_DESIGNATOR_LENGTH
+    ) {
+      const delegateAddress = '0x' + normalized.slice(DELEGATION_DESIGNATOR_PREFIX.length)
+      if (delegateAddress === config.delegationAddress.toLowerCase()) {
+        return null
+      }
     }
 
     const wdkAuth = await this._ownerAccount.signAuthorization({
@@ -411,14 +425,19 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const nonce = await this._resolveNonce(config)
     const eip7702Auth = await this._getAuthorization(config)
 
-    if (nonce === undefined && eip7702Auth === null) {
-      const cached = await this._consumeFreshQuote(tx)
-      if (cached?.sponsoredOp) {
-        return {
-          fee: cached.fee,
-          sponsoredOp: cached.sponsoredOp,
-          tokenQuote: cached.tokenQuote
+    if (nonce === undefined) {
+      if (eip7702Auth === null) {
+        const cached = await this._consumeFreshQuote(tx)
+        if (cached?.sponsoredOp) {
+          return {
+            fee: cached.fee,
+            sponsoredOp: cached.sponsoredOp,
+            tokenQuote: cached.tokenQuote
+          }
         }
+      } else {
+        // Quotes are built without an authorization, so they cannot back an undeployed send/sign.
+        this._consumeCachedQuote(tx)
       }
     }
 
