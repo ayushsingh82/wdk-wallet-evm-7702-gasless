@@ -18,7 +18,7 @@ import { Contract, hexlify, keccak256, randomBytes, toUtf8Bytes } from 'ethers'
 
 import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
 
-import { ENTRYPOINT_V8, Simple7702Account, calculateUserOperationMaxGasCost, fetchAccountNonce } from 'abstractionkit'
+import { ENTRYPOINT_V8, Simple7702Account, JsonRpcNode, calculateUserOperationMaxGasCost, fetchAccountNonce } from 'abstractionkit'
 
 import WalletAccountReadOnlyEvm7702Gasless from './wallet-account-read-only-evm-7702-gasless.js'
 
@@ -56,9 +56,6 @@ const QUOTE_CACHE_TTL_MS = 2 * 60 * 1000
 
 const NONCE_KEY_SHIFT = 64n
 const MAX_UINT192 = (1n << 192n) - 1n
-
-const DELEGATION_DESIGNATOR_PREFIX = '0xef0100'
-const DELEGATION_DESIGNATOR_LENGTH = 48
 
 /** @implements {IWalletAccount} */
 export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEvm7702Gasless {
@@ -170,7 +167,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
    * broadcast before the account's nonce moves.
    *
-   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
+   * against the transaction max. fee option. The fee check and the signature always cover the same
+   * prepared user operation.
    *
    * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
@@ -281,7 +280,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   /**
    * Sends a transaction.
    *
-   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
+   * against the transaction max. fee option. The fee check and the signature always cover the same
+   * prepared user operation.
    *
    * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
    * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
@@ -376,22 +377,11 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
 
   /** @private */
   async _getAuthorization (config = this._config) {
-    // Use this module's failover provider (connectivity-only retries). Checking via the owner
-    // account would go through wdk-wallet-evm's broader FailoverProvider defaults.
-    const code = await this._provider.request({
-      method: 'eth_getCode',
-      params: [this._address, 'latest']
-    })
+    const delegatedTo = await JsonRpcNode.from(this._provider).getDelegatedAddress(this._address)
 
-    const normalized = (code || '0x').toLowerCase()
-    if (
-      normalized.startsWith(DELEGATION_DESIGNATOR_PREFIX) &&
-      normalized.length === DELEGATION_DESIGNATOR_LENGTH
-    ) {
-      const delegateAddress = '0x' + normalized.slice(DELEGATION_DESIGNATOR_PREFIX.length)
-      if (delegateAddress === config.delegationAddress.toLowerCase()) {
-        return null
-      }
+    if (delegatedTo &&
+        delegatedTo.toLowerCase() === config.delegationAddress.toLowerCase()) {
+      return null
     }
 
     const wdkAuth = await this._ownerAccount.signAuthorization({
@@ -408,19 +398,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     }
   }
 
-  /**
-   * Resolves nonce / EIP-7702 authorization and builds the user operation that will later be
-   * signed and broadcast. The fee check and the signature always cover this same build.
-   *
-   * Quote-cache reuse is only valid when the EOA is already delegated: quotes are built without
-   * an authorization, and an undeployed sender needs one for bundler simulation.
-   *
-   * @private
-   * @param {EvmTransaction | EvmTransaction[]} tx - The original transaction value (used as the quote-cache key).
-   * @param {EvmTransaction[]} txs - The flattened transaction list to batch into the user operation.
-   * @param {Evm7702GaslessWalletConfig} config - The merged wallet configuration.
-   * @returns {Promise<{ fee: bigint, sponsoredOp: UserOperationV8, tokenQuote?: TokenQuote }>} The prepared build.
-   */
+  /** @private */
   async _prepareForSend (tx, txs, config) {
     const nonce = await this._resolveNonce(config)
     const eip7702Auth = await this._getAuthorization(config)
@@ -436,7 +414,6 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
           }
         }
       } else {
-        // Quotes are built without an authorization, so they cannot back an undeployed send/sign.
         this._consumeCachedQuote(tx)
       }
     }
@@ -457,13 +434,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     }
   }
 
-  /**
-   * Signs a previously prepared user operation with the owner account.
-   *
-   * @private
-   * @param {{ sponsoredOp: UserOperationV8 }} prepared - The build from `_prepareForSend`.
-   * @returns {Promise<UserOperationV8>} The signed user operation.
-   */
+  /** @private */
   async _signPreparedUserOperation (prepared) {
     const { sponsoredOp } = prepared
 

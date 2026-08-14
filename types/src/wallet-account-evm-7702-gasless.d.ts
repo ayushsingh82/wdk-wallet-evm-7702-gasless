@@ -98,7 +98,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
      * broadcast before the account's nonce moves.
      *
-     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
+     * against the transaction max. fee option. The fee check and the signature always cover the same
+     * prepared user operation.
      *
      * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
@@ -135,7 +137,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /**
      * Sends a transaction.
      *
-     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them against the transaction max. fee option.
+     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
+     * against the transaction max. fee option. The fee check and the signature always cover the same
+     * prepared user operation.
      *
      * An already-signed user operation (as returned by `signTransaction`) may also be passed; in that
      * case it is broadcast directly to the bundler, reusing the nonce and EIP-7702 authorization baked
@@ -173,27 +177,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     dispose(): void;
     /** @private */
     private _getAuthorization;
-    /**
-     * Resolves nonce / EIP-7702 authorization and builds the user operation that will later be
-     * signed and broadcast. The fee check and the signature always cover this same build.
-     *
-     * Quote-cache reuse is only valid when the EOA is already delegated: quotes are built without
-     * an authorization, and an undeployed sender needs one for bundler simulation.
-     *
-     * @private
-     * @param {EvmTransaction | EvmTransaction[]} tx - The original transaction value (used as the quote-cache key).
-     * @param {EvmTransaction[]} txs - The flattened transaction list to batch into the user operation.
-     * @param {Evm7702GaslessWalletConfig} config - The merged wallet configuration.
-     * @returns {Promise<{ fee: bigint, sponsoredOp: UserOperationV8, tokenQuote?: TokenQuote }>} The prepared build.
-     */
+    /** @private */
     private _prepareForSend;
-    /**
-     * Signs a previously prepared user operation with the owner account.
-     *
-     * @private
-     * @param {{ sponsoredOp: UserOperationV8 }} prepared - The build from `_prepareForSend`.
-     * @returns {Promise<UserOperationV8>} The signed user operation.
-     */
+    /** @private */
     private _signPreparedUserOperation;
     /** @private */
     private _sendUserOperation;

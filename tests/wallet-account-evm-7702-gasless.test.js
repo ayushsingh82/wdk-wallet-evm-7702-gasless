@@ -385,6 +385,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
           tokenQuote: { tokenCost: 500_000n }
         })
         fetchAccountNonceMock.mockResolvedValue(0n)
+        sendUserOperationMock.mockResolvedValue(DUMMY_USER_OP_HASH)
 
         const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
           ...SPONSORED_CONFIG,
@@ -402,7 +403,11 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
 
         expect(createUserOperationMock).toHaveBeenCalledTimes(1)
         expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(1)
-        expect(pmAccount._quoteCache.size).toBe(0)
+
+        await pmAccount.sendTransaction(TRANSACTION)
+
+        expect(createUserOperationMock).toHaveBeenCalledTimes(2)
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(2)
       })
     })
 
