@@ -159,6 +159,18 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @throws {ConfigurationError} If the configured `paymasterAddress` does not match the address returned by the paymaster RPC.
      */
     protected _buildSponsoredUserOperation(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<SponsoredUserOperation>;
+    /** @private */
+    private _getSmartAccount;
+    /** @private */
+    private _getPaymaster;
+    /** @private */
+    private _getEvmReadOnlyAccount;
+    /** @private */
+    private _buildPaymasterContext;
+    /** @private */
+    private _estimateFeesPerGas;
+    /** @private */
+    private _getTokenExchangeRate;
     /**
      * Builds the user operation and returns the gas cost in the paymaster
      * token's base units. Reached only on the token-paymaster path —
@@ -172,18 +184,6 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @returns {Promise<UserOperationGasCost>} The fee plus the built user operation and the token-quote data, cacheable between quote and send.
      */
     protected _getUserOperationGasCost(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<UserOperationGasCost>;
-    /** @private */
-    private _getSmartAccount;
-    /** @private */
-    private _getPaymaster;
-    /** @private */
-    private _getEvmReadOnlyAccount;
-    /** @private */
-    private _buildPaymasterContext;
-    /** @private */
-    private _estimateFeesPerGas;
-    /** @private */
-    private _getTokenExchangeRate;
 }
 export type Eip1193Provider = import("ethers").Eip1193Provider;
 export type EvmTransaction = import("@tetherto/wdk-wallet-evm").EvmTransaction;
@@ -311,11 +311,11 @@ export type Evm7702GaslessPaymasterTokenConfig = {
         address: string;
     };
     /**
-     * - The maximum fee amount for transfer operations.
+     * - The maximum fee, in the paymaster token's base units, accepted for transfer. Ignored when the transaction is sponsored.
      */
     transferMaxFee?: number | bigint;
     /**
-     * - The maximum fee amount for sendTransaction and signTransaction operations.
+     * - The maximum fee, in the paymaster token's base units, accepted for sendTransaction, signTransaction and approve. Ignored when the transaction is sponsored.
      */
     transactionMaxFee?: number | bigint;
 };

@@ -100,8 +100,8 @@ import { ConfigurationError } from './errors.js'
  * @property {string} [paymasterAddress] - Optional pin on the paymaster smart contract address. When omitted, it's derived from the paymaster RPC (pm_supportedERC20Tokens for Candide, pimlico_getTokenQuotes for Pimlico).
  * @property {Object} paymasterToken - The paymaster token configuration.
  * @property {string} paymasterToken.address - The address of the paymaster token.
- * @property {number | bigint} [transferMaxFee] - The maximum fee amount for transfer operations.
- * @property {number | bigint} [transactionMaxFee] - The maximum fee amount for sendTransaction and signTransaction operations.
+ * @property {number | bigint} [transferMaxFee] - The maximum fee, in the paymaster token's base units, accepted for transfer. Ignored when the transaction is sponsored.
+ * @property {number | bigint} [transactionMaxFee] - The maximum fee, in the paymaster token's base units, accepted for sendTransaction, signTransaction and approve. Ignored when the transaction is sponsored.
  */
 
 /**
