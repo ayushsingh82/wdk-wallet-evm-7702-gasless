@@ -417,6 +417,63 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         expect(createUserOperationMock).toHaveBeenCalledTimes(2)
         expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(2)
       })
+
+      test('should not reuse a token-paymaster quote when signing with isSponsored override', async () => {
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+        fetchAccountNonceMock.mockResolvedValue(0n)
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...PAYMASTER_TOKEN_CONFIG,
+          provider: DELEGATED_PROVIDER
+        })
+
+        const TRANSACTION = { to: ACCOUNT.address, value: 1, data: '0x' }
+
+        await pmAccount.quoteSendTransaction(TRANSACTION)
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(createPaymasterUserOperationMock.mock.calls[0][3]).toEqual({ token: USDT_MAINNET_ADDRESS })
+
+        const { fee: sponsoredQuote } = await pmAccount.quoteSendTransaction(TRANSACTION, { isSponsored: true })
+        expect(sponsoredQuote).toBe(0n)
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(1)
+
+        createPaymasterUserOperationMock.mockResolvedValue({ userOperation: { ...DUMMY_SPONSORED_OP } })
+
+        await pmAccount.signTransaction(TRANSACTION, { isSponsored: true })
+
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(2)
+        expect(createPaymasterUserOperationMock.mock.calls[1][3]).toEqual({})
+      })
+
+      test('should not reuse a quote when signing with a different paymaster token', async () => {
+        const USDC_MAINNET_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+        fetchAccountNonceMock.mockResolvedValue(0n)
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...PAYMASTER_TOKEN_CONFIG,
+          provider: DELEGATED_PROVIDER
+        })
+
+        const TRANSACTION = { to: ACCOUNT.address, value: 1, data: '0x' }
+
+        await pmAccount.quoteSendTransaction(TRANSACTION)
+        expect(createPaymasterUserOperationMock.mock.calls[0][3]).toEqual({ token: USDT_MAINNET_ADDRESS })
+
+        await pmAccount.signTransaction(TRANSACTION, {
+          paymasterToken: { address: USDC_MAINNET_ADDRESS }
+        })
+
+        expect(createPaymasterUserOperationMock).toHaveBeenCalledTimes(2)
+        expect(createPaymasterUserOperationMock.mock.calls[1][3]).toEqual({ token: USDC_MAINNET_ADDRESS })
+      })
     })
 
     describe('signed user operations', () => {

@@ -97,10 +97,11 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     this._evm7702GaslessReadOnlyAccount = undefined
 
     /**
-     * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
-     * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
-     * paymaster round-trip when the same tx was just quoted. Entries expire after
-     * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
+     * Cache of recently-quoted transactions keyed by serialized tx plus the build-relevant
+     * paymaster config (see _getTxKey). sendTransaction, signTransaction, and transfer consume an
+     * entry to skip the gas-estimation + paymaster round-trip when the same tx was just quoted
+     * under the same paymaster mode/token. Entries expire after QUOTE_CACHE_TTL_MS; expired
+     * entries are swept on insert.
      *
      * @private
      * @type {Map<string, TransactionQuote>}
@@ -167,9 +168,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
    * broadcast before the account's nonce moves.
    *
-   * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
-   * against the transaction max. fee option. The fee check and the signature always cover the same
-   * prepared user operation.
+   * If the transaction is not sponsored and `transactionMaxFee` is set, it also estimates the
+   * transaction's costs and checks them against that ceiling. The fee check and the signature
+   * always cover the same prepared user operation.
    *
    * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
    * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
@@ -185,10 +186,11 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     }
 
     const txs = [tx].flat()
-    const prepared = await this._prepareForSend(tx, txs, mergedConfig)
-
     const { isSponsored, transactionMaxFee } = mergedConfig
-    if (!isSponsored && transactionMaxFee !== undefined && prepared.fee > transactionMaxFee) {
+    const needFee = !isSponsored && transactionMaxFee !== undefined
+    const prepared = await this._prepareForSend(tx, txs, mergedConfig, { needFee })
+
+    if (needFee && prepared.fee > transactionMaxFee) {
       throw new Error('Exceeded maximum fee cost for transaction operation.')
     }
 
@@ -267,7 +269,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const fee = BigInt(result.fee)
 
     this._sweepExpiredQuotes()
-    this._quoteCache.set(WalletAccountEvm7702Gasless._getTxKey(tx), {
+    this._quoteCache.set(WalletAccountEvm7702Gasless._getTxKey(tx, mergedConfig), {
       fee,
       createdAt: Date.now(),
       sponsoredOp: result.sponsoredOp,
@@ -399,13 +401,13 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /** @private */
-  async _prepareForSend (tx, txs, config) {
+  async _prepareForSend (tx, txs, config, { needFee = true } = {}) {
     const nonce = await this._resolveNonce(config)
     const eip7702Auth = await this._getAuthorization(config)
 
     if (nonce === undefined) {
       if (eip7702Auth === null) {
-        const cached = await this._consumeFreshQuote(tx)
+        const cached = await this._consumeFreshQuote(tx, config)
         if (cached?.sponsoredOp) {
           return {
             fee: cached.fee,
@@ -414,11 +416,11 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
           }
         }
       } else {
-        this._consumeCachedQuote(tx)
+        this._consumeCachedQuote(tx, config)
       }
     }
 
-    if (config.isSponsored) {
+    if (config.isSponsored || !needFee) {
       const { userOperation, tokenQuote } = await this._buildSponsoredUserOperation(txs, config, {
         eip7702Auth,
         nonce
@@ -501,8 +503,8 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /** @private */
-  async _consumeFreshQuote (tx) {
-    const cached = this._consumeCachedQuote(tx)
+  async _consumeFreshQuote (tx, config = {}) {
+    const cached = this._consumeCachedQuote(tx, config)
     if (!cached?.sponsoredOp) return cached
 
     const onChainNonce = await fetchAccountNonce(this._provider, ENTRYPOINT_V8, this._address)
@@ -533,8 +535,8 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /** @private */
-  _consumeCachedQuote (tx) {
-    const key = WalletAccountEvm7702Gasless._getTxKey(tx)
+  _consumeCachedQuote (tx, config = {}) {
+    const key = WalletAccountEvm7702Gasless._getTxKey(tx, config)
     const quote = this._quoteCache.get(key)
     if (!quote) return null
     this._quoteCache.delete(key)
@@ -553,12 +555,18 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
   }
 
   /** @private */
-  static _getTxKey (tx) {
+  static _getTxKey (tx, config = {}) {
     const txs = Array.isArray(tx) ? tx : [tx]
-    return JSON.stringify(txs.map(t => ({
-      to: (t.to ?? '').toLowerCase(),
-      value: BigInt(t.value || 0).toString(),
-      data: t.data || '0x'
-    })))
+    return JSON.stringify({
+      txs: txs.map(t => ({
+        to: (t.to ?? '').toLowerCase(),
+        value: BigInt(t.value || 0).toString(),
+        data: t.data || '0x'
+      })),
+      isSponsored: Boolean(config.isSponsored),
+      paymasterToken: config.paymasterToken?.address?.toLowerCase() ?? null,
+      paymasterAddress: config.paymasterAddress?.toLowerCase() ?? null,
+      sponsorshipPolicyId: config.sponsorshipPolicyId ?? null
+    })
   }
 }
