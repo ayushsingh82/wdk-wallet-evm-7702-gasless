@@ -45,10 +45,11 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     /** @private */
     private _evm7702GaslessReadOnlyAccount;
     /**
-     * Cache of recently-quoted transactions keyed by their serialized tx (see _getTxKey).
-     * sendTransaction, signTransaction, and transfer consume an entry to skip the gas-estimation +
-     * paymaster round-trip when the same tx was just quoted. Entries expire after
-     * QUOTE_CACHE_TTL_MS; expired entries are swept on insert.
+     * Cache of recently-quoted transactions keyed by serialized tx plus the build-relevant
+     * paymaster config (see _getTxKey). sendTransaction, signTransaction, and transfer consume an
+     * entry to skip the gas-estimation + paymaster round-trip when the same tx was just quoted
+     * under the same paymaster mode/token. Entries expire after QUOTE_CACHE_TTL_MS; expired
+     * entries are swept on insert.
      *
      * @private
      * @type {Map<string, TransactionQuote>}
@@ -98,9 +99,9 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
      * configured address. Note that the nonce is fixed at sign time, so a signed operation must be
      * broadcast before the account's nonce moves.
      *
-     * If the transaction is not sponsored, it also estimates the transaction's costs and checks them
-     * against the transaction max. fee option. The fee check and the signature always cover the same
-     * prepared user operation.
+     * If the transaction is not sponsored and `transactionMaxFee` is set, it also estimates the
+     * transaction's costs and checks them against that ceiling. The fee check and the signature
+     * always cover the same prepared user operation.
      *
      * @param {EvmTransaction | EvmTransaction[]} tx - The transaction, or an array of multiple transactions to send in batch.
      * @param {Partial<Evm7702GaslessPaymasterTokenConfig | Evm7702GaslessSponsorshipPolicyConfig>} [config] - If set, overrides the given configuration options.
