@@ -325,9 +325,6 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     ])
 
     const info = await evmReadOnlyAccount.getTransaction(userOpByHash.transactionHash)
-    if (!info) {
-      throw new NoSuchElementError(`No user operation found for '${hash}'.`)
-    }
 
     return {
       ...info,
