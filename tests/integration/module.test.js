@@ -139,6 +139,18 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
   let bundlerInstance, paymasterInstance
   let paymasterAddress
 
+  const buildPaymasterTokenConfig = (overrides = {}) => ({
+    provider: 'http://localhost:8545',
+    bundlerUrl: 'http://localhost:4337',
+    paymasterUrl: 'http://localhost:3000?pimlico',
+    paymasterAddress,
+    delegationAddress: DELEGATION_ADDRESS,
+    paymasterToken: {
+      address: MOCK_PAYMASTER_TOKEN_ADDRESS
+    },
+    ...overrides
+  })
+
   beforeAll(async () => {
     await plantMainnetContracts(ethersProvider)
 
@@ -512,6 +524,43 @@ describe('@wdk/wallet-evm-7702-gasless', () => {
 
     await expect(account.transfer(TRANSFER))
       .rejects.toThrow('Exceeded maximum fee cost for transfer operation.')
+  }, TIMEOUT)
+
+  test('should create a wallet with a low transaction max fee, derive an account, try to send a transaction and gracefully fail', async () => {
+    const config = buildPaymasterTokenConfig({ transactionMaxFee: 100 })
+
+    const limitedWallet = new WalletManagerEvm7702Gasless(SEED_PHRASE, config)
+    const account = await limitedWallet.getAccount(0)
+
+    const TX = {
+      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
+      value: 0
+    }
+
+    await expect(account.sendTransaction(TX))
+      .rejects.toThrow('Exceeded maximum fee cost for transaction operation.')
+  }, TIMEOUT)
+
+  test.each([
+    ['exactly equal to', 0n],
+    ['below', 1n]
+  ])('should allow a fee %s transactionMaxFee', async (_label, headroom) => {
+    const TX = {
+      to: '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd',
+      value: 0
+    }
+
+    const account0 = await wallet.getAccount(0)
+    const { fee } = await account0.quoteSendTransaction(TX)
+
+    const { hash, fee: sendFee } = await account0.sendTransaction(TX, {
+      transactionMaxFee: fee + headroom
+    })
+    const receipt = await waitForTx(hash, account0)
+
+    expect(sendFee).toBe(fee)
+    expect(receipt.status).toBe(1)
+    expect(hash).toMatch(/^0x[0-9a-fA-F]{64}$/)
   }, TIMEOUT)
 
   test('should use cached fee when sendTransaction is called with the same quoted params', async () => {
