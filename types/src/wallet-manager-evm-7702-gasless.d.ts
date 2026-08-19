@@ -36,6 +36,13 @@ export default class WalletManagerEvm7702Gasless extends WalletManager {
      * @returns {Promise<WalletAccountEvm7702Gasless>} The account.
      */
     getAccountByPath(path: string): Promise<WalletAccountEvm7702Gasless>;
+    /**
+     * Returns the current fee rates.
+     *
+     * @returns {Promise<FeeRates>} The fee rates (in weis).
+     * @throws {Error} If the wallet is not connected to a provider.
+     */
+    getFeeRates(): Promise<FeeRates>;
 }
 export type Provider = import("ethers").Provider;
 export type FeeRates = import("@tetherto/wdk-wallet-evm").FeeRates;

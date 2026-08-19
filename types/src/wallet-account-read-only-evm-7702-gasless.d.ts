@@ -41,6 +41,19 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     /** @private */
     private _evmReadOnlyAccount;
     /**
+     * Returns the account's eth balance.
+     *
+     * @returns {Promise<bigint>} The eth balance (in weis).
+     */
+    getBalance(): Promise<bigint>;
+    /**
+     * Returns the account balance for a specific token.
+     *
+     * @param {string} tokenAddress - The smart contract address of the token.
+     * @returns {Promise<bigint>} The token balance (in base unit).
+     */
+    getTokenBalance(tokenAddress: string): Promise<bigint>;
+    /**
      * Returns the account balances for multiple tokens.
      *
      * @param {string[]} tokenAddresses - The smart contract addresses of the tokens.
@@ -117,6 +130,14 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @returns {Promise<bigint>} The allowance.
      */
     getAllowance(token: string, spender: string): Promise<bigint>;
+    /**
+     * Verifies a message's signature.
+     *
+     * @param {string} message - The original message.
+     * @param {string} signature - The signature to verify.
+     * @returns {Promise<boolean>} True if the signature is valid.
+     */
+    verify(message: string, signature: string): Promise<boolean>;
     /**
      * Verifies a typed data signature.
      *
