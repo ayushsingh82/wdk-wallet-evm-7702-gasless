@@ -522,6 +522,52 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
     })
 
     describe('quoteSendTransaction', () => {
+      test('should include the EIP-7702 authorization when quoting for an undeployed EOA', async () => {
+        const QUOTED_TOKEN_FEE = 500_000n
+
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: QUOTED_TOKEN_FEE }
+        })
+
+        const ownerAccount = new actualWalletEvm.WalletAccountEvm(SEED_PHRASE, "0'/0/0", { provider: EIP1193_PROVIDER })
+        const wdkAuth = await ownerAccount.signAuthorization({ address: SPONSORED_CONFIG.delegationAddress })
+        const expectedAuth = {
+          chainId: BigInt(wdkAuth.chainId),
+          address: wdkAuth.address,
+          nonce: BigInt(wdkAuth.nonce),
+          yParity: Number(wdkAuth.signature.yParity) === 0 ? '0x0' : '0x1',
+          r: wdkAuth.signature.r,
+          s: wdkAuth.signature.s
+        }
+        ownerAccount.dispose()
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", PAYMASTER_TOKEN_CONFIG)
+
+        const { fee } = await pmAccount.quoteSendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' })
+
+        expect(fee).toBe(QUOTED_TOKEN_FEE)
+        expect(createUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(createUserOperationMock.mock.calls[0][3].eip7702Auth).toEqual(expectedAuth)
+      })
+
+      test('should omit the EIP-7702 authorization when quoting for an already-delegated EOA', async () => {
+        createPaymasterUserOperationMock.mockResolvedValue({
+          userOperation: { ...DUMMY_SPONSORED_OP },
+          tokenQuote: { tokenCost: 500_000n }
+        })
+
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", {
+          ...PAYMASTER_TOKEN_CONFIG,
+          provider: DELEGATED_PROVIDER
+        })
+
+        await pmAccount.quoteSendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' })
+
+        expect(createUserOperationMock).toHaveBeenCalledTimes(1)
+        expect(createUserOperationMock.mock.calls[0][3].eip7702Auth).toBeUndefined()
+      })
+
       test('should return zero fee for sponsored transactions', async () => {
         const TX = { to: ACCOUNT.address, value: 1, data: '0x' }
 

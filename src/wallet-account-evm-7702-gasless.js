@@ -265,7 +265,8 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       return { fee: 0n }
     }
 
-    const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig)
+    const eip7702Auth = await this._getAuthorization(mergedConfig)
+    const result = await this._getUserOperationGasCost([tx].flat(), mergedConfig, { eip7702Auth })
     const fee = BigInt(result.fee)
 
     this._sweepExpiredQuotes()
