@@ -129,6 +129,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       getNetworkMock.mockResolvedValue({ chainId: 1n })
   
       sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+        if (method === 'eth_chainId') return '0x1'
         if (method === 'eth_gasPrice') return '0x174876e800'
         if (method === 'eth_maxPriorityFeePerGas') return '0x77359400'
         return '0x0'

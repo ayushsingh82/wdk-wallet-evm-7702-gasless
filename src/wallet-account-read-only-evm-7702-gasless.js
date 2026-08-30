@@ -92,6 +92,7 @@ import { ConfigurationError } from './errors.js'
 /**
  * @typedef {Object} Evm7702GaslessWalletCommonConfig
  * @property {string | Eip1193Provider | (string | Eip1193Provider)[]} provider - The url of the rpc provider, or an instance of a class that implements eip-1193. It's also possible to provide an array of urls or EIP 1193 providers instead. In such case, connection errors will cause the wallet to automatically fallback on the next provider in the list.
+ * @property {number} [chainId] - The chain id the wallet operates on (e.g. 1 for ethereum). When set, every UserOperation build asserts the provider reports this chain and throws `ConfigurationError` on mismatch before anything is built or signed; the underlying read-only account also pins to a static network, skipping per-call chain detection. When omitted, the provider's reported chain is trusted.
  * @property {number} [retries] - If set and if 'provider' is a list of urls or EIP 1193 providers, the number of additional retry attempts after the initial call fails. Total attempts = `1 + retries`. For example, `retries: 3` with 4 providers will try each provider once before throwing. If `retries` exceeds the number of providers, the failover will loop back and retry already-failed providers in round-robin order. Default: 3.
  * @property {string} bundlerUrl - The url of the bundler/paymaster service.
  * @property {string} [paymasterUrl] - The url of the paymaster service when it differs from bundlerUrl. Omit when one url serves both the bundler and paymaster (e.g. Candide, Pimlico).
@@ -482,15 +483,28 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   }
 
   /**
-   * Returns the chain id.
+   * Returns the chain id, asserting the provider is on the configured network.
+   *
+   * The value is read once from the provider (`eth_chainId`), checked against
+   * `config.chainId`, and cached. Every UserOperation is built and signed against
+   * this value, so a provider reporting a different chain than the one the
+   * application configured must fail here rather than produce a signature for the
+   * wrong network. The check is skipped when `config.chainId` is omitted.
    *
    * @protected
    * @returns {Promise<bigint>} The chain id.
+   * @throws {ConfigurationError} If the provider's chain id does not match `config.chainId`.
    */
   async _getChainId () {
     if (this._chainId === undefined) {
-      const evmReadOnlyAccount = await this._getEvmReadOnlyAccount()
-      const { chainId } = await evmReadOnlyAccount._provider.getNetwork()
+      const chainId = BigInt(await sendJsonRpcRequest(this._provider, 'eth_chainId', []))
+
+      if (this._config.chainId !== undefined && chainId !== BigInt(this._config.chainId)) {
+        throw new ConfigurationError(
+          `Provider is on chain ${chainId} but the wallet is configured for chain ${this._config.chainId}`
+        )
+      }
+
       this._chainId = chainId
     }
 
@@ -529,6 +543,9 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * @throws {ConfigurationError} If the configured `paymasterAddress` does not match the address returned by the paymaster RPC.
    */
   async _buildSponsoredUserOperation (txs, config, overrides = {}) {
+    // Fail before any bundler/paymaster round-trip if the provider is on the wrong chain.
+    await this._getChainId()
+
     const smartAccount = this._getSmartAccount()
 
     const calls = txs.map(tx => ({

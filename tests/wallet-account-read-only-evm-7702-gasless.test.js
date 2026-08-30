@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals'
 import { NoSuchElementError, ValueError } from '@tetherto/wdk-wallet'
+import { ConfigurationError } from '../src/errors.js'
 
 const ADDRESS = '0x405005C7c4422390F4B334F64Cf20E0b767131d0'
 const SPENDER = '0xa460AEbce0d3A4BecAd8ccf9D6D4861296c503Bd'
@@ -138,6 +139,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       getNetworkMock.mockResolvedValue({ chainId: 1n })
 
       sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+        if (method === 'eth_chainId') return '0x1'
         if (method === 'eth_gasPrice') return '0x174876e800'
         if (method === 'eth_maxPriorityFeePerGas') return '0x77359400'
         return '0x0'
@@ -173,6 +175,40 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       test('should throw if neither isSponsored nor paymasterToken is set', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, isSponsored: undefined }))
           .toThrow('Missing required paymaster token configuration fields: paymasterToken.')
+      })
+    })
+
+    describe('_getChainId', () => {
+      const TRANSACTION = { to: SPENDER, value: 1, data: '0x' }
+
+      test('should throw if the provider reports a chain other than the configured chainId', async () => {
+        // sendJsonRpcRequestMock answers eth_chainId with 0x1 (mainnet).
+        const mismatched = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...PAYMASTER_TOKEN_CONFIG, chainId: 137 })
+
+        await expect(mismatched.quoteSendTransaction(TRANSACTION))
+          .rejects.toThrow(new ConfigurationError('Provider is on chain 1 but the wallet is configured for chain 137'))
+        expect(createUserOperationMock).not.toHaveBeenCalled()
+        expect(createPaymasterUserOperationMock).not.toHaveBeenCalled()
+      })
+
+      test('should return the chain id when it matches the configured chainId', async () => {
+        const matched = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, chainId: 1 })
+
+        await expect(matched._getChainId()).resolves.toBe(1n)
+      })
+
+      test('should not enforce a chain when chainId is omitted from the config', async () => {
+        await expect(account._getChainId()).resolves.toBe(1n)
+      })
+
+      test('should read the chain id from the provider only once', async () => {
+        sendJsonRpcRequestMock.mockClear()
+
+        await account._getChainId()
+        await account._getChainId()
+
+        const chainIdCalls = sendJsonRpcRequestMock.mock.calls.filter(([, method]) => method === 'eth_chainId')
+        expect(chainIdCalls).toHaveLength(1)
       })
     })
 
@@ -325,6 +361,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         }
 
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'pimlico_getUserOperationGasPrice') {
             return { fast: { maxFeePerGas: '0x174876e800', maxPriorityFeePerGas: '0x77359400' } }
           }
@@ -344,6 +381,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
 
       test('should not inflate the priority fee when eth_maxPriorityFeePerGas is unsupported by the node', async () => {
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'eth_gasPrice') return '0x174876e800'
           if (method === 'eth_maxPriorityFeePerGas') throw new Error('method not found')
           return '0x0'
@@ -388,6 +426,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         })
 
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'eth_gasPrice') return '0x174876e800'
           if (method === 'eth_maxPriorityFeePerGas') return '0x77359400'
           if (method === 'pm_supportedERC20Tokens') {
@@ -423,6 +462,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         })
 
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'pimlico_getUserOperationGasPrice') {
             return { fast: { maxFeePerGas: '0x174876e800', maxPriorityFeePerGas: '0x77359400' } }
           }
