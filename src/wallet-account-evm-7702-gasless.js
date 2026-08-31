@@ -255,6 +255,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
+    // Assert the provider is on the configured chain before `_getAuthorization`
+    // signs a 7702 authorization against a mismatched RPC.
+    await this._getChainId()
+
     const { isSponsored } = mergedConfig
 
     if (WalletAccountEvm7702Gasless._isSignedUserOperation(tx)) {
@@ -403,6 +407,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
 
   /** @private */
   async _prepareForSend (tx, txs, config, { needFee = true } = {}) {
+    // Assert the provider is on the configured chain before `_getAuthorization`
+    // signs a 7702 authorization against a mismatched RPC.
+    await this._getChainId()
+
     const nonce = await this._resolveNonce(config)
     const eip7702Auth = await this._getAuthorization(config)
 

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import * as bip39 from 'bip39'
 import { Contract, keccak256, toUtf8Bytes } from 'ethers'
 
+import { ConfigurationError } from '../src/errors.js'
+
 const actualWalletEvm = await import('@tetherto/wdk-wallet-evm')
 const actualAk = await import('abstractionkit')
 
@@ -605,6 +607,18 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
           { isSponsored: false }
         )).rejects.toThrow('Missing required paymaster token configuration fields: paymasterToken.')
       })
+
+      test('should assert the provider chain before signing an EIP-7702 authorization', async () => {
+        // sendJsonRpcRequestMock answers eth_chainId with 0x1 (mainnet).
+        const pmAccount = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", { ...PAYMASTER_TOKEN_CONFIG, chainId: 137 })
+        const authSpy = jest.spyOn(pmAccount, '_getAuthorization')
+
+        await expect(pmAccount.quoteSendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' }))
+          .rejects.toThrow(new ConfigurationError('Provider is on chain 1 but the wallet is configured for chain 137'))
+
+        expect(authSpy).not.toHaveBeenCalled()
+        expect(createUserOperationMock).not.toHaveBeenCalled()
+      })
     })
   
     describe('sendTransaction', () => {
@@ -706,8 +720,21 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         expect(fee).toBe(0n)
         expect(createUserOperationMock.mock.calls[0][3].eip7702Auth).toBeUndefined()
       })
+
+      test('should assert the provider chain before signing an EIP-7702 authorization', async () => {
+        // sendJsonRpcRequestMock answers eth_chainId with 0x1 (mainnet).
+        const mismatched = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", { ...SPONSORED_CONFIG, chainId: 137 })
+        const authSpy = jest.spyOn(mismatched, '_getAuthorization')
+
+        await expect(mismatched.sendTransaction({ to: ACCOUNT.address, value: 1, data: '0x' }))
+          .rejects.toThrow(new ConfigurationError('Provider is on chain 1 but the wallet is configured for chain 137'))
+
+        expect(authSpy).not.toHaveBeenCalled()
+        expect(createUserOperationMock).not.toHaveBeenCalled()
+        expect(sendUserOperationMock).not.toHaveBeenCalled()
+      })
     })
-  
+
     describe('transfer', () => {
       test('should successfully transfer tokens with sponsored flow', async () => {
         const TRANSFER = {

@@ -326,6 +326,10 @@ export type Evm7702GaslessWalletCommonConfig = {
      */
     provider: string | Eip1193Provider | (string | Eip1193Provider)[];
     /**
+     * - The chain id the wallet operates on (e.g. 1 for ethereum). When set, every UserOperation build asserts the provider reports this chain and throws `ConfigurationError` on mismatch before anything is built or signed; the underlying read-only account also pins to a static network, skipping per-call chain detection. When omitted, the provider's reported chain is trusted.
+     */
+    chainId?: number;
+    /**
      * - If set and if 'provider' is a list of urls or EIP 1193 providers, the number of additional retry attempts after the initial call fails. Total attempts = `1 + retries`. For example, `retries: 3` with 4 providers will try each provider once before throwing. If `retries` exceeds the number of providers, the failover will loop back and retry already-failed providers in round-robin order. Default: 3.
      */
     retries?: number;
