@@ -26,4 +26,3 @@ export type Eip7702AuthorizationOverride = import("./src/wallet-account-read-onl
 export type BuildSponsoredUserOperationOverrides = import("./src/wallet-account-read-only-evm-7702-gasless.js").BuildSponsoredUserOperationOverrides;
 export type SponsoredUserOperation = import("./src/wallet-account-read-only-evm-7702-gasless.js").SponsoredUserOperation;
 export type Evm7702GaslessTransactionDetails = import("./src/wallet-account-read-only-evm-7702-gasless.js").Evm7702GaslessTransactionDetails;
-export type EntryPointVersion = import("./src/wallet-account-read-only-evm-7702-gasless.js").EntryPointVersion;

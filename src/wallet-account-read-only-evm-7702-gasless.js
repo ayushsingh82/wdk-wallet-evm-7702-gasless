@@ -125,14 +125,6 @@ import { ConfigurationError } from './errors.js'
  *   Evm7702GaslessPaymasterTokenConfig)} Evm7702GaslessWalletConfig
  */
 
-/**
- * An ERC-4337 EntryPoint version.
- *
- * @typedef {Object} EntryPointVersion
- * @property {typeof Simple7702Account | typeof Simple7702AccountV09} account - The account implementation whose EIP-712 signing domain matches the EntryPoint.
- * @property {string} address - The address of the EntryPoint the account implementation was built for.
- */
-
 const GAS_FEE_MULTIPLIER = 150n
 const GAS_FEE_DIVISOR = 100n
 const EXCHANGE_RATE_PRECISION = 10n ** 18n
@@ -629,12 +621,32 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   }
 
   /**
-   * Returns the EntryPoint version the account operates under, as selected by the
-   * `entryPointVersion` configuration field.
+   * Returns the address of the EntryPoint the account operates under, as selected
+   * by the `entryPointVersion` configuration field.
    *
    * @protected
-   * @returns {EntryPointVersion} The account implementation and EntryPoint address selected by the configuration.
+   * @returns {Promise<string>} The address of the EntryPoint user operations are submitted to and nonces are read from.
    */
+  async _getEntryPointAddress () {
+    return this._getEntryPointVersion().address
+  }
+
+  /**
+   * Builds the EIP-712 payload that authorizes a user operation under the
+   * EntryPoint version the account operates under.
+   *
+   * @protected
+   * @param {UserOperationV8} userOp - The user operation to authorize.
+   * @param {bigint} chainId - The id of the chain the user operation is signed for.
+   * @returns {Promise<TypedData>} The typed data to sign.
+   */
+  async _getUserOperationTypedData (userOp, chainId) {
+    const { account: Account, address: entrypointAddress } = this._getEntryPointVersion()
+
+    return Account.getUserOperationEip712Data(userOp, chainId, { entrypointAddress })
+  }
+
+  /** @private */
   _getEntryPointVersion () {
     return ENTRY_POINT_VERSIONS.get(this._config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION)
   }

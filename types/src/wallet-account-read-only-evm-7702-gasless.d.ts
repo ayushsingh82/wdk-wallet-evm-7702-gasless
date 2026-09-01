@@ -209,13 +209,25 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      */
     protected _buildSponsoredUserOperation(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<SponsoredUserOperation>;
     /**
-     * Returns the EntryPoint version the account operates under, as selected by the
-     * `entryPointVersion` configuration field.
+     * Returns the address of the EntryPoint the account operates under, as selected
+     * by the `entryPointVersion` configuration field.
      *
      * @protected
-     * @returns {EntryPointVersion} The account implementation and EntryPoint address selected by the configuration.
+     * @returns {Promise<string>} The address of the EntryPoint user operations are submitted to and nonces are read from.
      */
-    protected _getEntryPointVersion(): EntryPointVersion;
+    protected _getEntryPointAddress(): Promise<string>;
+    /**
+     * Builds the EIP-712 payload that authorizes a user operation under the
+     * EntryPoint version the account operates under.
+     *
+     * @protected
+     * @param {UserOperationV8} userOp - The user operation to authorize.
+     * @param {bigint} chainId - The id of the chain the user operation is signed for.
+     * @returns {Promise<TypedData>} The typed data to sign.
+     */
+    protected _getUserOperationTypedData(userOp: UserOperationV8, chainId: bigint): Promise<TypedData>;
+    /** @private */
+    private _getEntryPointVersion;
     /** @private */
     private _getSmartAccount;
     /** @private */
@@ -400,20 +412,5 @@ export type Evm7702GaslessPaymasterTokenConfig = {
     transactionMaxFee?: number | bigint;
 };
 export type Evm7702GaslessWalletConfig = Evm7702GaslessWalletCommonConfig & (Evm7702GaslessSponsorshipPolicyConfig | Evm7702GaslessPaymasterTokenConfig);
-/**
- * An ERC-4337 EntryPoint version.
- */
-export type EntryPointVersion = {
-    /**
-     * - The account implementation whose EIP-712 signing domain matches the EntryPoint.
-     */
-    account: typeof Simple7702Account | typeof Simple7702AccountV09;
-    /**
-     * - The address of the EntryPoint the account implementation was built for.
-     */
-    address: string;
-};
 import { WalletAccountReadOnly } from '@tetherto/wdk-wallet';
 import { Bundler } from 'abstractionkit';
-import { Simple7702Account } from 'abstractionkit';
-import { Simple7702AccountV09 } from 'abstractionkit';

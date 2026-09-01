@@ -43,7 +43,6 @@
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').BuildSponsoredUserOperationOverrides} BuildSponsoredUserOperationOverrides */
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').SponsoredUserOperation} SponsoredUserOperation */
 /** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').Evm7702GaslessTransactionDetails} Evm7702GaslessTransactionDetails */
-/** @typedef {import('./src/wallet-account-read-only-evm-7702-gasless.js').EntryPointVersion} EntryPointVersion */
 
 export { default } from './src/wallet-manager-evm-7702-gasless.js'
 
