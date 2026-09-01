@@ -507,22 +507,18 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     }
     if (config.entryPointVersion !== undefined && !ENTRY_POINT_VERSIONS.has(config.entryPointVersion)) {
       const supported = [...ENTRY_POINT_VERSIONS.keys()].map(version => `'${version}'`).join(', ')
-
       throw new ConfigurationError(
-        `Unsupported entryPointVersion: ${config.entryPointVersion}. Supported versions: ${supported}.`
+        `The 'entryPointVersion' option must be one of ${supported}; received ${config.entryPointVersion}.`
       )
     }
 
     const entryPointVersion = config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION
-    const foreign = [...ENTRY_POINT_VERSIONS].find(([version, { account }]) =>
-      version !== entryPointVersion &&
-      account.DEFAULT_DELEGATEE_ADDRESS.toLowerCase() === config.delegationAddress.toLowerCase()
-    )
-    if (foreign) {
-      const [foreignVersion] = foreign
+    for (const [version, { account }] of ENTRY_POINT_VERSIONS) {
+      if (version === entryPointVersion) continue
+      if (account.DEFAULT_DELEGATEE_ADDRESS.toLowerCase() !== config.delegationAddress.toLowerCase()) continue
 
       throw new ConfigurationError(
-        `delegationAddress ${config.delegationAddress} is the reference implementation for EntryPoint v${foreignVersion}, but entryPointVersion is '${entryPointVersion}'. An implementation only accepts user operations from the EntryPoint it was built for: set entryPointVersion to '${foreignVersion}', or point delegationAddress at a v${entryPointVersion} implementation.`
+        `The 'delegationAddress' option (${config.delegationAddress}) is the reference implementation for EntryPoint v${version}, but the 'entryPointVersion' option is '${entryPointVersion}'. An implementation only accepts user operations from the EntryPoint it was built for: set 'entryPointVersion' to '${version}', or point 'delegationAddress' at a v${entryPointVersion} implementation.`
       )
     }
     if (!config.isSponsored && !config.paymasterToken) {

@@ -189,17 +189,17 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
 
       test('should throw if entryPointVersion is not a supported version', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entryPointVersion: '0.7' }))
-          .toThrow("Unsupported entryPointVersion: 0.7. Supported versions: '0.8', '0.9'.")
+          .toThrow("The 'entryPointVersion' option must be one of '0.8', '0.9'; received 0.7.")
       })
 
       test('should throw if delegationAddress is the v0.9 implementation while running on v0.8', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, delegationAddress: V09_DELEGATION_ADDRESS }))
-          .toThrow(`delegationAddress ${V09_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.9, but entryPointVersion is '0.8'.`)
+          .toThrow(`The 'delegationAddress' option (${V09_DELEGATION_ADDRESS}) is the reference implementation for EntryPoint v0.9, but the 'entryPointVersion' option is '0.8'.`)
       })
 
       test('should throw if delegationAddress is the v0.8 implementation while running on v0.9', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entryPointVersion: '0.9' }))
-          .toThrow(`delegationAddress ${V08_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.8, but entryPointVersion is '0.9'.`)
+          .toThrow(`The 'delegationAddress' option (${V08_DELEGATION_ADDRESS}) is the reference implementation for EntryPoint v0.8, but the 'entryPointVersion' option is '0.9'.`)
       })
 
       test('should accept a delegationAddress that is not a reference implementation on any version', () => {
