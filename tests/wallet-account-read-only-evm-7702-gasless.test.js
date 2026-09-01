@@ -298,6 +298,33 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
           [{ tokens: [TOKEN_ADDRESS] }, actualAk.ENTRYPOINT_V9, '0x1']
         )
       })
+
+      test('should resolve the version from a subclass override rather than from the configuration', async () => {
+        const CUSTOM_DELEGATION_ADDRESS = '0x2222222222222222222222222222222222222222'
+
+        class NegotiatingAccount extends WalletAccountReadOnlyEvm7702Gasless {
+          async _getEntryPointVersion () {
+            return '0.9'
+          }
+        }
+
+        const pmAccount = new NegotiatingAccount(ADDRESS, {
+          ...PAYMASTER_TOKEN_CONFIG,
+          delegationAddress: CUSTOM_DELEGATION_ADDRESS
+        })
+
+        await pmAccount.quoteSendTransaction({ to: SPENDER, value: 1, data: '0x' })
+
+        expect(Simple7702AccountV09Mock).toHaveBeenCalledWith(ADDRESS, {
+          entrypointAddress: actualAk.ENTRYPOINT_V9,
+          delegateeAddress: CUSTOM_DELEGATION_ADDRESS
+        })
+        expect(sendJsonRpcRequestMock).toHaveBeenCalledWith(
+          PAYMASTER_TOKEN_CONFIG.bundlerUrl,
+          'pm_supportedERC20Tokens',
+          [actualAk.ENTRYPOINT_V9]
+        )
+      })
     })
 
     describe('getBalance', () => {

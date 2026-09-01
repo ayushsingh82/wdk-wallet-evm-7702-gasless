@@ -209,8 +209,16 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      */
     protected _buildSponsoredUserOperation(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<SponsoredUserOperation>;
     /**
-     * Returns the address of the EntryPoint the account operates under, as selected
-     * by the `entryPointVersion` configuration field.
+     * Returns the EntryPoint version the account operates under, as selected by the
+     * `entryPointVersion` configuration field. Every other EntryPoint-dependent
+     * operation of the account resolves through it.
+     *
+     * @protected
+     * @returns {Promise<'0.8' | '0.9'>} The selected EntryPoint version.
+     */
+    protected _getEntryPointVersion(): Promise<"0.8" | "0.9">;
+    /**
+     * Returns the address of the EntryPoint the account operates under.
      *
      * @protected
      * @returns {Promise<string>} The address of the EntryPoint user operations are submitted to and nonces are read from.
@@ -227,7 +235,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      */
     protected _getUserOperationTypedData(userOp: UserOperationV8, chainId: bigint): Promise<TypedData>;
     /** @private */
-    private _getEntryPointVersion;
+    private _getEntryPoint;
     /** @private */
     private _getSmartAccount;
     /** @private */

@@ -566,7 +566,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * @throws {ConfigurationError} If the configured `paymasterAddress` does not match the address returned by the paymaster RPC.
    */
   async _buildSponsoredUserOperation (txs, config, overrides = {}) {
-    const smartAccount = this._getSmartAccount()
+    const smartAccount = await this._getSmartAccount()
 
     const calls = txs.map(tx => ({
       to: tx.to,
@@ -621,14 +621,27 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   }
 
   /**
-   * Returns the address of the EntryPoint the account operates under, as selected
-   * by the `entryPointVersion` configuration field.
+   * Returns the EntryPoint version the account operates under, as selected by the
+   * `entryPointVersion` configuration field. Every other EntryPoint-dependent
+   * operation of the account resolves through it.
+   *
+   * @protected
+   * @returns {Promise<'0.8' | '0.9'>} The selected EntryPoint version.
+   */
+  async _getEntryPointVersion () {
+    return this._config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION
+  }
+
+  /**
+   * Returns the address of the EntryPoint the account operates under.
    *
    * @protected
    * @returns {Promise<string>} The address of the EntryPoint user operations are submitted to and nonces are read from.
    */
   async _getEntryPointAddress () {
-    return this._getEntryPointVersion().address
+    const { address } = await this._getEntryPoint()
+
+    return address
   }
 
   /**
@@ -641,20 +654,20 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
    * @returns {Promise<TypedData>} The typed data to sign.
    */
   async _getUserOperationTypedData (userOp, chainId) {
-    const { account: Account, address: entrypointAddress } = this._getEntryPointVersion()
+    const { account: Account, address: entrypointAddress } = await this._getEntryPoint()
 
     return Account.getUserOperationEip712Data(userOp, chainId, { entrypointAddress })
   }
 
   /** @private */
-  _getEntryPointVersion () {
-    return ENTRY_POINT_VERSIONS.get(this._config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION)
+  async _getEntryPoint () {
+    return ENTRY_POINT_VERSIONS.get(await this._getEntryPointVersion())
   }
 
   /** @private */
-  _getSmartAccount () {
+  async _getSmartAccount () {
     if (!this._smartAccount) {
-      const { account: Account, address } = this._getEntryPointVersion()
+      const { account: Account, address } = await this._getEntryPoint()
 
       this._smartAccount = new Account(this._address, {
         entrypointAddress: address,
@@ -734,7 +747,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   async _getTokenExchangeRate (config) {
     const tokenAddress = config.paymasterToken.address
     const paymasterUrl = config.paymasterUrl || config.bundlerUrl
-    const { address: entrypointAddress } = this._getEntryPointVersion()
+    const { address: entrypointAddress } = await this._getEntryPoint()
 
     if (paymasterUrl.includes('pimlico')) {
       const chainId = await this._getChainId()
