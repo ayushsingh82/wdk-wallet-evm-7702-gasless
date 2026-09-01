@@ -70,6 +70,9 @@ const DUMMY_SPONSORED_OP = {
 const actualWalletEvm = await import('@tetherto/wdk-wallet-evm')
 const actualAk = await import('abstractionkit')
 
+const V08_DELEGATION_ADDRESS = actualAk.Simple7702Account.DEFAULT_DELEGATEE_ADDRESS
+const V09_DELEGATION_ADDRESS = actualAk.Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS
+
 const getBalanceMock = jest.fn()
 const getTokenBalanceMock = jest.fn()
 const getTokenBalancesMock = jest.fn()
@@ -114,6 +117,14 @@ const Simple7702AccountMock = jest.fn().mockImplementation(() => ({
   createUserOperation: createUserOperationMock
 }))
 
+Simple7702AccountMock.DEFAULT_DELEGATEE_ADDRESS = V08_DELEGATION_ADDRESS
+
+const Simple7702AccountV09Mock = jest.fn().mockImplementation(() => ({
+  createUserOperation: createUserOperationMock
+}))
+
+Simple7702AccountV09Mock.DEFAULT_DELEGATEE_ADDRESS = V09_DELEGATION_ADDRESS
+
 const Erc7677PaymasterMock = jest.fn().mockImplementation(() => ({
   createPaymasterUserOperation: createPaymasterUserOperationMock
 }))
@@ -122,6 +133,7 @@ jest.unstable_mockModule('abstractionkit', () => ({
   ...actualAk,
   Bundler: BundlerMock,
   Simple7702Account: Simple7702AccountMock,
+  Simple7702AccountV09: Simple7702AccountV09Mock,
   Erc7677Paymaster: Erc7677PaymasterMock,
   sendJsonRpcRequest: sendJsonRpcRequestMock
 }))
@@ -173,6 +185,118 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       test('should throw if neither isSponsored nor paymasterToken is set', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, isSponsored: undefined }))
           .toThrow('Missing required paymaster token configuration fields: paymasterToken.')
+      })
+
+      test('should throw if entrypointVersion is not a supported version', () => {
+        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.7' }))
+          .toThrow("Unsupported entrypointVersion: 0.7. Supported versions: '0.8', '0.9'.")
+      })
+
+      test('should throw if delegationAddress is the v0.9 implementation while running on v0.8', () => {
+        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, delegationAddress: V09_DELEGATION_ADDRESS }))
+          .toThrow(`delegationAddress ${V09_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.9, but entrypointVersion is '0.8'.`)
+      })
+
+      test('should throw if delegationAddress is the v0.8 implementation while running on v0.9', () => {
+        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.9' }))
+          .toThrow(`delegationAddress ${V08_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.8, but entrypointVersion is '0.9'.`)
+      })
+
+      test('should accept a delegationAddress that is not a reference implementation on any version', () => {
+        const CUSTOM_DELEGATION_ADDRESS = '0x1111111111111111111111111111111111111111'
+
+        const v08Account = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, delegationAddress: CUSTOM_DELEGATION_ADDRESS })
+        const v09Account = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.9', delegationAddress: CUSTOM_DELEGATION_ADDRESS })
+
+        expect(v08Account).toBeInstanceOf(WalletAccountReadOnlyEvm7702Gasless)
+        expect(v09Account).toBeInstanceOf(WalletAccountReadOnlyEvm7702Gasless)
+      })
+    })
+
+    describe('entrypointVersion', () => {
+      const EXCHANGE_RATE = 2_000_000_000_000_000_000n
+
+      beforeEach(() => {
+        sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_gasPrice') return '0x174876e800'
+          if (method === 'eth_maxPriorityFeePerGas') return '0x77359400'
+          if (method === 'pm_supportedERC20Tokens') {
+            return {
+              tokens: [{
+                address: TOKEN_ADDRESS,
+                exchangeRate: '0x' + EXCHANGE_RATE.toString(16)
+              }]
+            }
+          }
+          return '0x0'
+        })
+      })
+
+      test('should build the smart account on EntryPoint v0.8 when no version is configured', async () => {
+        const pmAccount = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, PAYMASTER_TOKEN_CONFIG)
+
+        await pmAccount.quoteSendTransaction({ to: SPENDER, value: 1, data: '0x' })
+
+        expect(Simple7702AccountMock).toHaveBeenCalledWith(ADDRESS, {
+          entrypointAddress: actualAk.ENTRYPOINT_V8,
+          delegateeAddress: V08_DELEGATION_ADDRESS
+        })
+        expect(Simple7702AccountV09Mock).not.toHaveBeenCalled()
+        expect(sendJsonRpcRequestMock).toHaveBeenCalledWith(
+          PAYMASTER_TOKEN_CONFIG.bundlerUrl,
+          'pm_supportedERC20Tokens',
+          [actualAk.ENTRYPOINT_V8]
+        )
+      })
+
+      test('should build the smart account on EntryPoint v0.9 when the version is set to 0.9', async () => {
+        const pmAccount = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, {
+          ...PAYMASTER_TOKEN_CONFIG,
+          entrypointVersion: '0.9',
+          delegationAddress: V09_DELEGATION_ADDRESS
+        })
+
+        await pmAccount.quoteSendTransaction({ to: SPENDER, value: 1, data: '0x' })
+
+        expect(Simple7702AccountV09Mock).toHaveBeenCalledWith(ADDRESS, {
+          entrypointAddress: actualAk.ENTRYPOINT_V9,
+          delegateeAddress: V09_DELEGATION_ADDRESS
+        })
+        expect(Simple7702AccountMock).not.toHaveBeenCalled()
+        expect(sendJsonRpcRequestMock).toHaveBeenCalledWith(
+          PAYMASTER_TOKEN_CONFIG.bundlerUrl,
+          'pm_supportedERC20Tokens',
+          [actualAk.ENTRYPOINT_V9]
+        )
+      })
+
+      test('should request the pimlico token quote for the configured EntryPoint version', async () => {
+        const PIMLICO_BUNDLER = 'https://api.pimlico.io/v2/1/rpc?apikey=test'
+
+        sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'pimlico_getUserOperationGasPrice') {
+            return { fast: { maxFeePerGas: '0x174876e800', maxPriorityFeePerGas: '0x77359400' } }
+          }
+          if (method === 'pimlico_getTokenQuotes') {
+            return { quotes: [{ exchangeRate: '0x' + EXCHANGE_RATE.toString(16) }] }
+          }
+          return '0x0'
+        })
+
+        const pmAccount = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, {
+          ...PAYMASTER_TOKEN_CONFIG,
+          bundlerUrl: PIMLICO_BUNDLER,
+          entrypointVersion: '0.9',
+          delegationAddress: V09_DELEGATION_ADDRESS
+        })
+
+        await pmAccount.quoteSendTransaction({ to: SPENDER, value: 1, data: '0x' })
+
+        expect(sendJsonRpcRequestMock).toHaveBeenCalledWith(
+          PIMLICO_BUNDLER,
+          'pimlico_getTokenQuotes',
+          [{ tokens: [TOKEN_ADDRESS] }, actualAk.ENTRYPOINT_V9, '0x1']
+        )
       })
     })
 

@@ -205,6 +205,18 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @throws {ConfigurationError} If the configured `paymasterAddress` does not match the address returned by the paymaster RPC.
      */
     protected _buildSponsoredUserOperation(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<SponsoredUserOperation>;
+    /**
+     * Returns the EntryPoint version the account operates under, as selected by the
+     * `entrypointVersion` configuration field: the `abstractionkit` account class and
+     * the address of the EntryPoint it was built for.
+     *
+     * @protected
+     * @returns {{ account: typeof Simple7702Account | typeof Simple7702AccountV09, address: string }} The account implementation and its EntryPoint address.
+     */
+    protected _getEntrypointVersion(): {
+        account: typeof Simple7702Account | typeof Simple7702AccountV09;
+        address: string;
+    };
     /** @private */
     private _getSmartAccount;
     /** @private */
@@ -338,9 +350,13 @@ export type Evm7702GaslessWalletCommonConfig = {
      */
     paymasterUrl?: string;
     /**
-     * - The address of the smart account implementation to delegate to (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount).
+     * - The address of the smart account implementation to delegate to. It must be an implementation built for the configured `entrypointVersion` (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount on EntryPoint v0.8, '0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5' on v0.9).
      */
     delegationAddress: string;
+    /**
+     * - The ERC-4337 EntryPoint version the account operates under. It selects the EntryPoint address and the matching account implementation together. Default: '0.8'.
+     */
+    entrypointVersion?: "0.8" | "0.9";
     /**
      * - When true, each send is placed in a fresh, independent nonce lane (a random 192-bit key at sequence 0) so concurrent or back-to-back sends don't collide on the nonce. Ordering between such sends is not guaranteed and each consumes a new EntryPoint nonce slot. Ignored when `nonceKey` is set. Overridable per call.
      */
@@ -387,3 +403,5 @@ export type Evm7702GaslessPaymasterTokenConfig = {
 export type Evm7702GaslessWalletConfig = Evm7702GaslessWalletCommonConfig & (Evm7702GaslessSponsorshipPolicyConfig | Evm7702GaslessPaymasterTokenConfig);
 import { WalletAccountReadOnly } from '@tetherto/wdk-wallet';
 import { Bundler } from 'abstractionkit';
+import { Simple7702Account } from 'abstractionkit';
+import { Simple7702AccountV09 } from 'abstractionkit';
