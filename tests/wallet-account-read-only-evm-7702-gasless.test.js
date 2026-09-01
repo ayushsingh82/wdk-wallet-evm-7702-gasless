@@ -187,33 +187,33 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
           .toThrow('Missing required paymaster token configuration fields: paymasterToken.')
       })
 
-      test('should throw if entrypointVersion is not a supported version', () => {
-        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.7' }))
-          .toThrow("Unsupported entrypointVersion: 0.7. Supported versions: '0.8', '0.9'.")
+      test('should throw if entryPointVersion is not a supported version', () => {
+        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entryPointVersion: '0.7' }))
+          .toThrow("Unsupported entryPointVersion: 0.7. Supported versions: '0.8', '0.9'.")
       })
 
       test('should throw if delegationAddress is the v0.9 implementation while running on v0.8', () => {
         expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, delegationAddress: V09_DELEGATION_ADDRESS }))
-          .toThrow(`delegationAddress ${V09_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.9, but entrypointVersion is '0.8'.`)
+          .toThrow(`delegationAddress ${V09_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.9, but entryPointVersion is '0.8'.`)
       })
 
       test('should throw if delegationAddress is the v0.8 implementation while running on v0.9', () => {
-        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.9' }))
-          .toThrow(`delegationAddress ${V08_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.8, but entrypointVersion is '0.9'.`)
+        expect(() => new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entryPointVersion: '0.9' }))
+          .toThrow(`delegationAddress ${V08_DELEGATION_ADDRESS} is the reference implementation for EntryPoint v0.8, but entryPointVersion is '0.9'.`)
       })
 
       test('should accept a delegationAddress that is not a reference implementation on any version', () => {
         const CUSTOM_DELEGATION_ADDRESS = '0x1111111111111111111111111111111111111111'
 
         const v08Account = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, delegationAddress: CUSTOM_DELEGATION_ADDRESS })
-        const v09Account = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entrypointVersion: '0.9', delegationAddress: CUSTOM_DELEGATION_ADDRESS })
+        const v09Account = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, { ...SPONSORED_CONFIG, entryPointVersion: '0.9', delegationAddress: CUSTOM_DELEGATION_ADDRESS })
 
         expect(v08Account).toBeInstanceOf(WalletAccountReadOnlyEvm7702Gasless)
         expect(v09Account).toBeInstanceOf(WalletAccountReadOnlyEvm7702Gasless)
       })
     })
 
-    describe('entrypointVersion', () => {
+    describe('entryPointVersion', () => {
       const EXCHANGE_RATE = 2_000_000_000_000_000_000n
 
       beforeEach(() => {
@@ -252,7 +252,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       test('should build the smart account on EntryPoint v0.9 when the version is set to 0.9', async () => {
         const pmAccount = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, {
           ...PAYMASTER_TOKEN_CONFIG,
-          entrypointVersion: '0.9',
+          entryPointVersion: '0.9',
           delegationAddress: V09_DELEGATION_ADDRESS
         })
 
@@ -286,7 +286,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         const pmAccount = new WalletAccountReadOnlyEvm7702Gasless(ADDRESS, {
           ...PAYMASTER_TOKEN_CONFIG,
           bundlerUrl: PIMLICO_BUNDLER,
-          entrypointVersion: '0.9',
+          entryPointVersion: '0.9',
           delegationAddress: V09_DELEGATION_ADDRESS
         })
 

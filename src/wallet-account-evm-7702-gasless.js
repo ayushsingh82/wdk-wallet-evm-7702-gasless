@@ -442,7 +442,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const { sponsoredOp } = prepared
 
     const chainId = await this._getChainId()
-    const { account: Account, address: entrypointAddress } = this._getEntrypointVersion()
+    const { account: Account, address: entrypointAddress } = this._getEntryPointVersion()
     const typedData = Account.getUserOperationEip712Data(sponsoredOp, chainId, { entrypointAddress })
 
     sponsoredOp.signature = await this._ownerAccount.signTypedData({
@@ -469,7 +469,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * @returns {Promise<string>} The user operation hash.
    */
   async _broadcastSignedUserOperation (userOp) {
-    return await this._getBundler().sendUserOperation(userOp, this._getEntrypointVersion().address)
+    return await this._getBundler().sendUserOperation(userOp, this._getEntryPointVersion().address)
   }
 
   /**
@@ -509,7 +509,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const cached = this._consumeCachedQuote(tx, config)
     if (!cached?.sponsoredOp) return cached
 
-    const onChainNonce = await fetchAccountNonce(this._provider, this._getEntrypointVersion().address, this._address)
+    const onChainNonce = await fetchAccountNonce(this._provider, this._getEntryPointVersion().address, this._address)
 
     return cached.sponsoredOp.nonce === onChainNonce ? cached : null
   }
@@ -526,7 +526,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
           throw new Error('nonceKey must be within the uint192 range (0 to 2^192 - 1).')
         }
       }
-      return await fetchAccountNonce(this._provider, this._getEntrypointVersion().address, this._address, key)
+      return await fetchAccountNonce(this._provider, this._getEntryPointVersion().address, this._address, key)
     }
 
     if (config.parallel) {

@@ -157,12 +157,12 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
       account.dispose()
     })
 
-    describe('entrypointVersion', () => {
+    describe('entryPointVersion', () => {
       const TX = { to: ACCOUNT.address, value: 1, data: '0x' }
 
       const V09_CONFIG = {
         ...SPONSORED_CONFIG,
-        entrypointVersion: '0.9',
+        entryPointVersion: '0.9',
         delegationAddress: V09_DELEGATION_ADDRESS
       }
 

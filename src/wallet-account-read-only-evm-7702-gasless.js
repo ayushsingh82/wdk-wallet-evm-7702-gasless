@@ -97,8 +97,8 @@ import { ConfigurationError } from './errors.js'
  * @property {number} [retries] - If set and if 'provider' is a list of urls or EIP 1193 providers, the number of additional retry attempts after the initial call fails. Total attempts = `1 + retries`. For example, `retries: 3` with 4 providers will try each provider once before throwing. If `retries` exceeds the number of providers, the failover will loop back and retry already-failed providers in round-robin order. Default: 3.
  * @property {string} bundlerUrl - The url of the bundler/paymaster service.
  * @property {string} [paymasterUrl] - The url of the paymaster service when it differs from bundlerUrl. Omit when one url serves both the bundler and paymaster (e.g. Candide, Pimlico).
- * @property {string} delegationAddress - The address of the smart account implementation to delegate to. It must be an implementation built for the configured `entrypointVersion` (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount on EntryPoint v0.8, '0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5' on v0.9).
- * @property {'0.8' | '0.9'} [entrypointVersion] - The ERC-4337 EntryPoint version the account operates under. It selects the EntryPoint address and the matching account implementation together. Default: '0.8'.
+ * @property {string} delegationAddress - The address of the smart account implementation to delegate to. It must be an implementation built for the configured `entryPointVersion` (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount on EntryPoint v0.8, '0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5' on v0.9).
+ * @property {'0.8' | '0.9'} [entryPointVersion] - The ERC-4337 EntryPoint version the account operates under. It selects the EntryPoint address and the matching account implementation together. Default: '0.8'.
  * @property {boolean} [parallel] - When true, each send is placed in a fresh, independent nonce lane (a random 192-bit key at sequence 0) so concurrent or back-to-back sends don't collide on the nonce. Ordering between such sends is not guaranteed and each consumes a new EntryPoint nonce slot. Ignored when `nonceKey` is set. Overridable per call.
  * @property {number | bigint | string} [nonceKey] - Send in an explicit nonce lane. A string is hashed to a deterministic key — a reusable named lane that resumes the same sequence across sessions; a number or bigint is used as the raw uint192 key and must be within the uint192 range (0 to 2^192 - 1), otherwise the send throws (pass a bigint or string for keys above 2^53). Sends sharing a key are ordered sequentially; different keys run in parallel. Overridable per call.
  */
@@ -125,18 +125,24 @@ import { ConfigurationError } from './errors.js'
  *   Evm7702GaslessPaymasterTokenConfig)} Evm7702GaslessWalletConfig
  */
 
+/**
+ * An ERC-4337 EntryPoint version.
+ *
+ * @typedef {Object} EntryPointVersion
+ * @property {typeof Simple7702Account | typeof Simple7702AccountV09} account - The account implementation whose EIP-712 signing domain matches the EntryPoint.
+ * @property {string} address - The address of the EntryPoint the account implementation was built for.
+ */
+
 const GAS_FEE_MULTIPLIER = 150n
 const GAS_FEE_DIVISOR = 100n
 const EXCHANGE_RATE_PRECISION = 10n ** 18n
 
 /**
- * The supported ERC-4337 EntryPoint versions, keyed by the `entrypointVersion`
- * configuration value. Each entry pairs an `abstractionkit` account class with the
- * EntryPoint address it was built for: the class fixes the EIP-712 signing domain
- * while the address is where nonces are read and user operations are submitted, so
- * the two are never selected independently.
+ * The supported ERC-4337 EntryPoint versions, keyed by the `entryPointVersion`
+ * configuration value. Each entry pairs an `abstractionkit` account implementation
+ * with the address of the EntryPoint it was built for.
  */
-const ENTRYPOINT_VERSIONS = new Map([
+const ENTRY_POINT_VERSIONS = new Map([
   ['0.8', { account: Simple7702Account, address: ENTRYPOINT_V8 }],
   ['0.9', { account: Simple7702AccountV09, address: ENTRYPOINT_V9 }]
 ])
@@ -144,7 +150,7 @@ const ENTRYPOINT_VERSIONS = new Map([
 /**
  * The EntryPoint version used when the configuration does not select one.
  */
-const DEFAULT_ENTRYPOINT_VERSION = '0.8'
+const DEFAULT_ENTRY_POINT_VERSION = '0.8'
 
 /**
  * The default network error and ethers error [codes](https://docs.ethers.org/v6/api/utils/errors/) that denote a connectivity failure.
@@ -479,11 +485,14 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   }
 
   /**
-   * Validates the configuration to ensure all required fields are present.
+   * Validates the configuration to ensure all required fields are present and that
+   * the selected EntryPoint version and delegation implementation are compatible.
    *
    * @protected
    * @param {Partial<Evm7702GaslessWalletConfig>} config - The configuration to validate.
    * @throws {ConfigurationError} If the configuration is invalid or has missing required fields.
+   * @throws {ConfigurationError} If `entryPointVersion` is not a supported EntryPoint version.
+   * @throws {ConfigurationError} If `delegationAddress` is the reference implementation of an EntryPoint version other than the configured one.
    * @returns {void}
    */
   _validateConfig (config) {
@@ -496,24 +505,24 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
     if (!config.delegationAddress) {
       throw new ConfigurationError('Missing required configuration field: delegationAddress.')
     }
-    if (config.entrypointVersion !== undefined && !ENTRYPOINT_VERSIONS.has(config.entrypointVersion)) {
-      const supported = [...ENTRYPOINT_VERSIONS.keys()].map(version => `'${version}'`).join(', ')
+    if (config.entryPointVersion !== undefined && !ENTRY_POINT_VERSIONS.has(config.entryPointVersion)) {
+      const supported = [...ENTRY_POINT_VERSIONS.keys()].map(version => `'${version}'`).join(', ')
 
       throw new ConfigurationError(
-        `Unsupported entrypointVersion: ${config.entrypointVersion}. Supported versions: ${supported}.`
+        `Unsupported entryPointVersion: ${config.entryPointVersion}. Supported versions: ${supported}.`
       )
     }
 
-    const entrypointVersion = config.entrypointVersion ?? DEFAULT_ENTRYPOINT_VERSION
-    const foreign = [...ENTRYPOINT_VERSIONS].find(([version, { account }]) =>
-      version !== entrypointVersion &&
+    const entryPointVersion = config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION
+    const foreign = [...ENTRY_POINT_VERSIONS].find(([version, { account }]) =>
+      version !== entryPointVersion &&
       account.DEFAULT_DELEGATEE_ADDRESS.toLowerCase() === config.delegationAddress.toLowerCase()
     )
     if (foreign) {
       const [foreignVersion] = foreign
 
       throw new ConfigurationError(
-        `delegationAddress ${config.delegationAddress} is the reference implementation for EntryPoint v${foreignVersion}, but entrypointVersion is '${entrypointVersion}'. An implementation only accepts user operations from the EntryPoint it was built for: set entrypointVersion to '${foreignVersion}', or point delegationAddress at a v${entrypointVersion} implementation.`
+        `delegationAddress ${config.delegationAddress} is the reference implementation for EntryPoint v${foreignVersion}, but entryPointVersion is '${entryPointVersion}'. An implementation only accepts user operations from the EntryPoint it was built for: set entryPointVersion to '${foreignVersion}', or point delegationAddress at a v${entryPointVersion} implementation.`
       )
     }
     if (!config.isSponsored && !config.paymasterToken) {
@@ -625,20 +634,19 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
 
   /**
    * Returns the EntryPoint version the account operates under, as selected by the
-   * `entrypointVersion` configuration field: the `abstractionkit` account class and
-   * the address of the EntryPoint it was built for.
+   * `entryPointVersion` configuration field.
    *
    * @protected
-   * @returns {{ account: typeof Simple7702Account | typeof Simple7702AccountV09, address: string }} The account implementation and its EntryPoint address.
+   * @returns {EntryPointVersion} The account implementation and EntryPoint address selected by the configuration.
    */
-  _getEntrypointVersion () {
-    return ENTRYPOINT_VERSIONS.get(this._config.entrypointVersion ?? DEFAULT_ENTRYPOINT_VERSION)
+  _getEntryPointVersion () {
+    return ENTRY_POINT_VERSIONS.get(this._config.entryPointVersion ?? DEFAULT_ENTRY_POINT_VERSION)
   }
 
   /** @private */
   _getSmartAccount () {
     if (!this._smartAccount) {
-      const { account: Account, address } = this._getEntrypointVersion()
+      const { account: Account, address } = this._getEntryPointVersion()
 
       this._smartAccount = new Account(this._address, {
         entrypointAddress: address,
@@ -718,7 +726,7 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
   async _getTokenExchangeRate (config) {
     const tokenAddress = config.paymasterToken.address
     const paymasterUrl = config.paymasterUrl || config.bundlerUrl
-    const { address: entrypointAddress } = this._getEntrypointVersion()
+    const { address: entrypointAddress } = this._getEntryPointVersion()
 
     if (paymasterUrl.includes('pimlico')) {
       const chainId = await this._getChainId()
