@@ -257,6 +257,7 @@ wallet.dispose()  // Dispose all accounts
 |-------|------|-------------|
 | `paymasterUrl` | `string` | URL of the paymaster service, when it differs from `bundlerUrl`. Omit when one URL serves both the bundler and paymaster (e.g. Candide, Pimlico) |
 | `retries` | `number` | Additional retry attempts for provider failover arrays. Total attempts are `1 + retries`. Defaults to `3` |
+| `chainId` | `number` | When set, UserOperation build and sign assert the provider reports this chain and throw `ConfigurationError` on mismatch. When omitted, the provider's chain is trusted |
 | `entryPointVersion` | `'0.8' \| '0.9'` | ERC-4337 EntryPoint version the account operates under. Selects the EntryPoint address and the matching account implementation together. Defaults to `'0.8'` |
 
 ### EntryPoint Version
