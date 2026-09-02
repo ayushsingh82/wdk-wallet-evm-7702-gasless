@@ -27,10 +27,20 @@ const getUserOperationReceiptMock = jest.fn()
 const sendJsonRpcRequestMock = jest.fn()
 const fetchAccountNonceMock = jest.fn()
 
+const V08_DELEGATION_ADDRESS = actualAk.Simple7702Account.DEFAULT_DELEGATEE_ADDRESS
+const V09_DELEGATION_ADDRESS = actualAk.Simple7702AccountV09.DEFAULT_DELEGATEE_ADDRESS
+
 const Simple7702AccountMock = jest.fn().mockImplementation(() => ({
   createUserOperation: createUserOperationMock
 }))
 Simple7702AccountMock.getUserOperationEip712Data = actualAk.Simple7702Account.getUserOperationEip712Data
+Simple7702AccountMock.DEFAULT_DELEGATEE_ADDRESS = V08_DELEGATION_ADDRESS
+
+const Simple7702AccountV09Mock = jest.fn().mockImplementation(() => ({
+  createUserOperation: createUserOperationMock
+}))
+Simple7702AccountV09Mock.getUserOperationEip712Data = actualAk.Simple7702AccountV09.getUserOperationEip712Data
+Simple7702AccountV09Mock.DEFAULT_DELEGATEE_ADDRESS = V09_DELEGATION_ADDRESS
 
 const BundlerMock = jest.fn().mockImplementation(() => ({
   sendUserOperation: sendUserOperationMock,
@@ -44,6 +54,7 @@ const Erc7677PaymasterMock = jest.fn().mockImplementation(() => ({
 jest.unstable_mockModule('abstractionkit', () => ({
   ...actualAk,
   Simple7702Account: Simple7702AccountMock,
+  Simple7702AccountV09: Simple7702AccountV09Mock,
   Bundler: BundlerMock,
   Erc7677Paymaster: Erc7677PaymasterMock,
   sendJsonRpcRequest: sendJsonRpcRequestMock,
@@ -144,6 +155,67 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
   
     afterEach(() => {
       account.dispose()
+    })
+
+    describe('entryPointVersion', () => {
+      const TX = { to: ACCOUNT.address, value: 1, data: '0x' }
+
+      const V09_CONFIG = {
+        ...SPONSORED_CONFIG,
+        entryPointVersion: '0.9',
+        delegationAddress: V09_DELEGATION_ADDRESS
+      }
+
+      const EXPECTED_V08_USER_OP_SIGNATURE = '0xe9739f744de8042aad75f8f9c66d4ebf90458eafa1d0dafb3013404029da548c68cc295755e8ebaf690db3b1655b580b5c3e8bcf3680273386914ccb2ba8736f1c'
+      const EXPECTED_V09_USER_OP_SIGNATURE = '0x8d1f183238422592c73e80c0359565a3e896c65a3a83daa7f7425ac0ebb3b75e51a66e5e1b326df160f4688a61d69ebd15e92905783a1ce8bcb29636008a42a11b'
+
+      let v09Account
+
+      beforeEach(() => {
+        v09Account = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", V09_CONFIG)
+      })
+
+      afterEach(() => {
+        v09Account.dispose()
+      })
+
+      test('should submit the user operation to the v0.9 EntryPoint', async () => {
+        await v09Account.sendTransaction(TX)
+
+        expect(sendUserOperationMock).toHaveBeenCalledWith(
+          { ...DUMMY_SPONSORED_OP, signature: EXPECTED_V09_USER_OP_SIGNATURE },
+          actualAk.ENTRYPOINT_V9
+        )
+      })
+
+      test('should sign the user operation over the v0.9 EntryPoint domain', async () => {
+        const signedOp = await v09Account.signTransaction(TX)
+
+        expect(signedOp.signature).toBe(EXPECTED_V09_USER_OP_SIGNATURE)
+        expect(signedOp.signature).not.toBe(EXPECTED_V08_USER_OP_SIGNATURE)
+      })
+
+      test('should read the nonce lane from the v0.9 EntryPoint', async () => {
+        fetchAccountNonceMock.mockResolvedValue(3n)
+
+        await v09Account.sendTransaction(TX, { nonceKey: 7 })
+
+        expect(fetchAccountNonceMock).toHaveBeenCalledWith(
+          expect.anything(),
+          actualAk.ENTRYPOINT_V9,
+          ACCOUNT.address,
+          7n
+        )
+      })
+
+      test('should submit the user operation to the v0.8 EntryPoint when no version is configured', async () => {
+        await account.sendTransaction(TX)
+
+        expect(sendUserOperationMock).toHaveBeenCalledWith(
+          { ...DUMMY_SPONSORED_OP, signature: EXPECTED_V08_USER_OP_SIGNATURE },
+          actualAk.ENTRYPOINT_V8
+        )
+      })
     })
 
     describe('nonce lanes', () => {
