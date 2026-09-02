@@ -18,7 +18,7 @@ import { Contract, hexlify, keccak256, randomBytes, toUtf8Bytes } from 'ethers'
 
 import { WalletAccountEvm } from '@tetherto/wdk-wallet-evm'
 
-import { ENTRYPOINT_V8, Simple7702Account, JsonRpcNode, calculateUserOperationMaxGasCost, fetchAccountNonce } from 'abstractionkit'
+import { JsonRpcNode, calculateUserOperationMaxGasCost, fetchAccountNonce } from 'abstractionkit'
 
 import WalletAccountReadOnlyEvm7702Gasless from './wallet-account-read-only-evm-7702-gasless.js'
 
@@ -450,7 +450,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const { sponsoredOp } = prepared
 
     const chainId = await this._getChainId()
-    const typedData = Simple7702Account.getUserOperationEip712Data(sponsoredOp, chainId)
+    const typedData = await this._getUserOperationTypedData(sponsoredOp, chainId)
 
     sponsoredOp.signature = await this._ownerAccount.signTypedData({
       domain: typedData.domain,
@@ -476,7 +476,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
    * @returns {Promise<string>} The user operation hash.
    */
   async _broadcastSignedUserOperation (userOp) {
-    return await this._getBundler().sendUserOperation(userOp, ENTRYPOINT_V8)
+    return await this._getBundler().sendUserOperation(userOp, await this._getEntryPointAddress())
   }
 
   /**
@@ -516,7 +516,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
     const cached = this._consumeCachedQuote(tx, config)
     if (!cached?.sponsoredOp) return cached
 
-    const onChainNonce = await fetchAccountNonce(this._provider, ENTRYPOINT_V8, this._address)
+    const onChainNonce = await fetchAccountNonce(this._provider, await this._getEntryPointAddress(), this._address)
 
     return cached.sponsoredOp.nonce === onChainNonce ? cached : null
   }
@@ -533,7 +533,7 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
           throw new Error('nonceKey must be within the uint192 range (0 to 2^192 - 1).')
         }
       }
-      return await fetchAccountNonce(this._provider, ENTRYPOINT_V8, this._address, key)
+      return await fetchAccountNonce(this._provider, await this._getEntryPointAddress(), this._address, key)
     }
 
     if (config.parallel) {

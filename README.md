@@ -249,7 +249,7 @@ wallet.dispose()  // Dispose all accounts
 |-------|------|-------------|
 | `provider` | `string \| Eip1193Provider \| (string \| Eip1193Provider)[]` | RPC endpoint URL, EIP-1193 provider instance, or failover list mixing both formats |
 | `bundlerUrl` | `string` | URL of the ERC-4337 bundler service |
-| `delegationAddress` | `string` | Address of the smart account implementation to delegate to |
+| `delegationAddress` | `string` | Address of the smart account implementation to delegate to. Must be an implementation built for the configured `entryPointVersion` |
 
 ### Optional Common Fields
 
@@ -257,6 +257,32 @@ wallet.dispose()  // Dispose all accounts
 |-------|------|-------------|
 | `paymasterUrl` | `string` | URL of the paymaster service, when it differs from `bundlerUrl`. Omit when one URL serves both the bundler and paymaster (e.g. Candide, Pimlico) |
 | `retries` | `number` | Additional retry attempts for provider failover arrays. Total attempts are `1 + retries`. Defaults to `3` |
+| `entryPointVersion` | `'0.8' \| '0.9'` | ERC-4337 EntryPoint version the account operates under. Selects the EntryPoint address and the matching account implementation together. Defaults to `'0.8'` |
+
+### EntryPoint Version
+
+The account runs on ERC-4337 EntryPoint **v0.8 by default**. Set `entryPointVersion` to `'0.9'` to target a bundler/paymaster that serves EntryPoint v0.9 instead:
+
+```javascript
+const wallet = new WalletManagerEvm7702Gasless(seedPhrase, {
+  provider: 'https://eth.llamarpc.com',
+  bundlerUrl: 'https://your-bundler.example/rpc',
+  entryPointVersion: '0.9',
+  delegationAddress: '0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5',
+  isSponsored: true
+})
+```
+
+`entryPointVersion` selects the EntryPoint address and the account implementation together. The implementation fixes the EIP-712 signing domain, while the EntryPoint address is where nonces are read and user operations are submitted, so the two are never configured independently.
+
+| Version | EntryPoint | Reference `delegationAddress` |
+|---------|------------|-------------------------------|
+| `'0.8'` (default) | `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108` | `0xe6Cae83BdE06E4c305530e199D7217f42808555B` |
+| `'0.9'` | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` | `0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5` |
+
+A delegation implementation only accepts user operations from the EntryPoint it was built for, so pairing one version's reference implementation with the other version is rejected at construction with a `ConfigurationError`. A custom `delegationAddress` is accepted on either version and is not verified — check yourself that it targets the configured EntryPoint.
+
+Omitting `entryPointVersion` preserves the previous behavior exactly: the same EntryPoint, delegation implementation, signatures and nonces as before the option existed.
 
 ### Sponsored Mode
 
@@ -386,7 +412,7 @@ This module uses standard ERC-4337 bundler RPCs (`eth_sendUserOperation`, `eth_e
 - **Private Key Management**: The package handles private keys internally via memory-safe buffers (`Uint8Array`) that are zeroed on `dispose()`
 - **Memory Cleanup**: Use the `dispose()` method to clear private keys from memory when done
 - **Fee Limits**: Set `transferMaxFee` and `transactionMaxFee` to prevent excessive transaction fees
-- **Delegation Awareness**: The EOA delegates execution to a smart account implementation — verify the `delegationAddress` is trusted and audited
+- **Delegation Awareness**: The EOA delegates execution to a smart account implementation — verify the `delegationAddress` is trusted and audited, and that it is built for the configured `entryPointVersion`
 - **Bundler Security**: Use trusted bundler services and validate UserOperation responses
 - **Contract Interactions**: Verify contract addresses and token decimals before transfers
 

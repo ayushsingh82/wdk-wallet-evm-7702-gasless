@@ -164,11 +164,14 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      */
     protected _createFailoverProvider(config?: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">): Eip1193Provider;
     /**
-     * Validates the configuration to ensure all required fields are present.
+     * Validates the configuration to ensure all required fields are present and that
+     * the selected EntryPoint version and delegation implementation are compatible.
      *
      * @protected
      * @param {Partial<Evm7702GaslessWalletConfig>} config - The configuration to validate.
      * @throws {ConfigurationError} If the configuration is invalid or has missing required fields.
+     * @throws {ConfigurationError} If `entryPointVersion` is not a supported EntryPoint version.
+     * @throws {ConfigurationError} If `delegationAddress` is the reference implementation of an EntryPoint version other than the configured one.
      * @returns {void}
      */
     protected _validateConfig(config: Partial<Evm7702GaslessWalletConfig>): void;
@@ -205,6 +208,34 @@ export default class WalletAccountReadOnlyEvm7702Gasless extends WalletAccountRe
      * @throws {ConfigurationError} If the configured `paymasterAddress` does not match the address returned by the paymaster RPC.
      */
     protected _buildSponsoredUserOperation(txs: EvmTransaction[], config: Omit<Evm7702GaslessWalletConfig, "transferMaxFee" | "transactionMaxFee">, overrides?: BuildSponsoredUserOperationOverrides): Promise<SponsoredUserOperation>;
+    /**
+     * Returns the EntryPoint version the account operates under, as selected by the
+     * `entryPointVersion` configuration field. Every other EntryPoint-dependent
+     * operation of the account resolves through it.
+     *
+     * @protected
+     * @returns {Promise<'0.8' | '0.9'>} The selected EntryPoint version.
+     */
+    protected _getEntryPointVersion(): Promise<"0.8" | "0.9">;
+    /**
+     * Returns the address of the EntryPoint the account operates under.
+     *
+     * @protected
+     * @returns {Promise<string>} The address of the EntryPoint user operations are submitted to and nonces are read from.
+     */
+    protected _getEntryPointAddress(): Promise<string>;
+    /**
+     * Builds the EIP-712 payload that authorizes a user operation under the
+     * EntryPoint version the account operates under.
+     *
+     * @protected
+     * @param {UserOperationV8} userOp - The user operation to authorize.
+     * @param {bigint} chainId - The id of the chain the user operation is signed for.
+     * @returns {Promise<TypedData>} The typed data to sign.
+     */
+    protected _getUserOperationTypedData(userOp: UserOperationV8, chainId: bigint): Promise<TypedData>;
+    /** @private */
+    private _getEntryPoint;
     /** @private */
     private _getSmartAccount;
     /** @private */
@@ -342,9 +373,13 @@ export type Evm7702GaslessWalletCommonConfig = {
      */
     paymasterUrl?: string;
     /**
-     * - The address of the smart account implementation to delegate to (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount).
+     * - The address of the smart account implementation to delegate to. It must be an implementation built for the configured `entryPointVersion` (e.g. '0xe6Cae83BdE06E4c305530e199D7217f42808555B' for SimpleAccount on EntryPoint v0.8, '0xa46cc63eBF4Bd77888AA327837d20b23A63a56B5' on v0.9).
      */
     delegationAddress: string;
+    /**
+     * - The ERC-4337 EntryPoint version the account operates under. It selects the EntryPoint address and the matching account implementation together. Default: '0.8'.
+     */
+    entryPointVersion?: "0.8" | "0.9";
     /**
      * - When true, each send is placed in a fresh, independent nonce lane (a random 192-bit key at sequence 0) so concurrent or back-to-back sends don't collide on the nonce. Ordering between such sends is not guaranteed and each consumes a new EntryPoint nonce slot. Ignored when `nonceKey` is set. Overridable per call.
      */
