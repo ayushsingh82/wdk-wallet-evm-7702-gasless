@@ -220,6 +220,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
 
       beforeEach(() => {
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'eth_gasPrice') return '0x174876e800'
           if (method === 'eth_maxPriorityFeePerGas') return '0x77359400'
           if (method === 'pm_supportedERC20Tokens') {
@@ -276,6 +277,7 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         const PIMLICO_BUNDLER = 'https://api.pimlico.io/v2/1/rpc?apikey=test'
 
         sendJsonRpcRequestMock.mockImplementation(async (_rpc, method) => {
+          if (method === 'eth_chainId') return '0x1'
           if (method === 'pimlico_getUserOperationGasPrice') {
             return { fast: { maxFeePerGas: '0x174876e800', maxPriorityFeePerGas: '0x77359400' } }
           }
