@@ -594,6 +594,16 @@ describe('@tetherto/wdk-wallet-evm-7702-gasless', () => {
         expect(createUserOperationMock).not.toHaveBeenCalled()
         expect(createPaymasterUserOperationMock).not.toHaveBeenCalled()
       })
+
+      test('should assert the provider chain before broadcasting an already-signed user operation', async () => {
+        const mismatched = new WalletAccountEvm7702Gasless(SEED_PHRASE, "0'/0/0", { ...SPONSORED_CONFIG, chainId: 137 })
+
+        await expect(mismatched.sendTransaction(SIGNED_OP))
+          .rejects.toThrow(new ConfigurationError('Provider is on chain 1 but the wallet is configured for chain 137'))
+
+        expect(sendUserOperationMock).not.toHaveBeenCalled()
+        mismatched.dispose()
+      })
     })
 
     describe('quoteSendTransaction', () => {

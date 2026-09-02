@@ -311,6 +311,10 @@ export default class WalletAccountEvm7702Gasless extends WalletAccountReadOnlyEv
       this._validateConfig(mergedConfig)
     }
 
+    // Assert the provider is on the configured chain before broadcasting a
+    // signed UserOp or before `_getAuthorization` signs a 7702 authorization.
+    await this._getChainId()
+
     const { isSponsored, transactionMaxFee } = mergedConfig
 
     if (WalletAccountEvm7702Gasless._isSignedUserOperation(tx)) {
